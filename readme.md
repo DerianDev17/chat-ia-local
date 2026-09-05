@@ -6,11 +6,11 @@ La identidad visual, los colores y los archivos de marca están en [BRAND.md](BR
 
 ## Ejecutar
 
-Necesitas Node.js 22.12 o superior y npm.
+Necesitas Node.js 22.12 o superior y pnpm 9.10.0.
 
 ```sh
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 Abre la dirección que imprime Vite. Pulsa **Cargar modelo** para iniciar la descarga y, al terminar, envía tu mensaje. También puedes preparar el texto mientras carga.
@@ -56,9 +56,9 @@ La exportación JSON incluye el documento completo mientras esté adjunto. Markd
 ## Comprobaciones
 
 ```sh
-npm test
-npm run build
-npm run preview
+pnpm test
+pnpm build
+pnpm preview
 ```
 
 Las pruebas usan `node:test`, JSDOM e IndexedDB simulado. Cubren persistencia, recarga, validación, contexto, errores, reintentos, cancelación de respuesta, borrado confirmado y saneamiento de Markdown. El motor se sustituye por un doble controlado en las pruebas de interfaz: no descargan pesos ni certifican inferencia real en una GPU.
@@ -79,10 +79,10 @@ Antes de publicar para otros usuarios, comprueba la carga y una respuesta real e
 
 ## Build y alojamiento
 
-`npm run build` produce `dist/`, listo para alojamiento estático con HTTPS. `base: './'` y la URL del Worker relativa al módulo permiten servir la app bajo una subcarpeta. No se necesitan claves API ni backend.
+`pnpm build` produce `dist/`, listo para alojamiento estático con HTTPS. `base: './'` y la URL del Worker relativa al módulo permiten servir la app bajo una subcarpeta. No se necesitan claves API ni backend.
 
 El motor WebLLM se importa solo al cargar el modelo. Vite puede avisar del tamaño de su paquete (incluye el runtime); el chat inicial y el historial no necesitan descargar ese módulo. Los pesos del modelo no se incluyen en `dist/`.
 
-Las dependencias directas están fijadas y `package-lock.json` permite instalaciones reproducibles.
+Las dependencias directas están fijadas y `pnpm-lock.yaml` permite instalaciones reproducibles.
 
 Las próximas funcionalidades propuestas y su división en commits están en [ROADMAP.md](ROADMAP.md).

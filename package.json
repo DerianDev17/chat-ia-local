@@ -10,7 +10,7 @@
     "test": "node --test tests/*.test.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "security:audit": "npm audit --audit-level=low"
+    "security:audit": "pnpm audit --audit-level=low"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.84",
@@ -25,5 +25,6 @@
   },
   "engines": {
     "node": ">=22.12.0"
-  }
+  },
+  "packageManager": "pnpm@9.10.0"
 }

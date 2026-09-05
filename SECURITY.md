@@ -2,7 +2,7 @@
 
 ## Alcance de las comprobaciones
 
-La revisión local combina `npm run security:audit`, pruebas de entradas maliciosas y comprobaciones de las políticas del navegador. Una auditoría sin avisos significa que npm no reporta vulnerabilidades conocidas en el árbol instalado; no certifica que la aplicación esté libre de fallos.
+La revisión local combina `pnpm security:audit`, pruebas de entradas maliciosas y comprobaciones de las políticas del navegador. Una auditoría sin avisos significa que npm no reporta vulnerabilidades conocidas en el árbol instalado; no certifica que la aplicación esté libre de fallos.
 
 ## Controles aplicados
 
@@ -26,11 +26,11 @@ El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensio
 ## Comprobar después de un cambio
 
 ```sh
-npm ci
-npm run security:audit
-npm test
-npm run build
-npm run format:check
+pnpm install --frozen-lockfile
+pnpm security:audit
+pnpm test
+pnpm build
+pnpm format:check
 ```
 
 Revisa las cabeceras del documento y del Worker en el alojamiento real. El resultado de la auditoría depende de los avisos disponibles en ese momento.
