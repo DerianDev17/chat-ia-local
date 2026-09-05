@@ -32,6 +32,9 @@ const OPTIONS = {
   ],
   ALLOWED_ATTR: ['href', 'title', 'start'],
   ALLOW_DATA_ATTR: false,
+  // Model-generated links are references, not commands for external apps.
+  // Relative URLs and protocol handlers (mailto, tel, sms, etc.) are excluded.
+  ALLOWED_URI_REGEXP: /^https?:\/\//i,
 };
 
 export function renderMarkdown(text, purifier = DOMPurify) {
