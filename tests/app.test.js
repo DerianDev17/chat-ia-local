@@ -512,3 +512,17 @@ test('cache failures release controls and cache maintenance blocks generation', 
   assert.match(page.$('#cache-status').textContent, /No se pudo/);
   page.close();
 });
+
+test('focus mode expands the workspace and persists its preference', async () => {
+  const page = await setup();
+  assert.equal(page.app.state.focusMode, false);
+  page.$('#focus-mode').click();
+  assert.equal(page.app.state.focusMode, true);
+  assert.equal(page.$('.app').classList.contains('focus-mode'), true);
+  assert.equal(page.$('#focus-mode').getAttribute('aria-pressed'), 'true');
+  assert.equal(page.window.localStorage.getItem('semilla-focus-mode'), 'true');
+  page.$('#focus-mode').click();
+  assert.equal(page.app.state.focusMode, false);
+  assert.equal(page.window.localStorage.getItem('semilla-focus-mode'), 'false');
+  page.close();
+});

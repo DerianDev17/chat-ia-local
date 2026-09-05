@@ -33,9 +33,11 @@ export function createApp({
     attaching: false,
     cacheBusy: false,
     selectedModel: MODELS[0].id,
+    focusMode: false,
   };
   try {
     state.selectedModel = getModel(window.localStorage.getItem('semilla-model') || MODELS[0].id).id;
+    state.focusMode = window.localStorage.getItem('semilla-focus-mode') === 'true';
   } catch {}
   let notice = '';
   let saveTimer;
@@ -111,6 +113,25 @@ export function createApp({
       error: 'No compatible',
     }[engineState];
     $('#composer').setAttribute('aria-busy', String(state.busy));
+  }
+
+  function setFocusMode(enabled) {
+    state.focusMode = enabled;
+    $('.app').classList.toggle('focus-mode', enabled);
+    $('#focus-mode').setAttribute('aria-pressed', String(enabled));
+    $('#focus-mode').setAttribute(
+      'aria-label',
+      enabled ? 'Desactivar modo enfoque' : 'Activar modo enfoque',
+    );
+    $('#focus-mode').title = enabled
+      ? 'Desactivar modo enfoque (Alt + F)'
+      : 'Activar modo enfoque (Alt + F)';
+    announce(enabled ? 'Modo enfoque activado.' : 'Modo enfoque desactivado.');
+    try {
+      window.localStorage.setItem('semilla-focus-mode', String(enabled));
+    } catch {
+      showNotice('El modo enfoque no se conservará al cerrar esta pestaña.');
+    }
   }
 
   async function save(conversation = state.current) {
@@ -828,12 +849,14 @@ export function createApp({
   }
 
   async function start() {
+    setFocusMode(state.focusMode);
     updateControls();
     sidebar(false, false);
     mobile.addEventListener('change', () => sidebar(false, false));
     $('#open-sidebar').addEventListener('click', () => sidebar(true));
     $('#close-sidebar').addEventListener('click', () => sidebar(false));
     $('#sidebar-backdrop').addEventListener('click', () => sidebar(false));
+    $('#focus-mode').addEventListener('click', () => setFocusMode(!state.focusMode));
     $('#search').addEventListener('input', renderHistory);
     $('#attach-document').addEventListener('click', () => $('#document-file').click());
     $('#document-file').addEventListener('change', () => {
@@ -972,6 +995,10 @@ export function createApp({
       if (event.altKey && event.key.toLowerCase() === 'n' && !doc.querySelector('dialog[open]')) {
         event.preventDefault();
         if (state.initialized) selectConversation(newConversation());
+      }
+      if (event.altKey && event.key.toLowerCase() === 'f' && !doc.querySelector('dialog[open]')) {
+        event.preventDefault();
+        setFocusMode(!state.focusMode);
       }
       if (
         event.key === 'Tab' &&

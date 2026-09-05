@@ -1499,3 +1499,49 @@ select:focus-visible {
     gap: 0.3rem;
   }
 }
+
+/* El modo enfoque amplía la superficie de trabajo sin cambiar de conversación. */
+.focus-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #d9dfd0;
+  border-radius: 999px;
+  background: #fdfbf5;
+  color: #53644d;
+  padding: 8px 11px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.focus-button > span:first-child {
+  color: #b85532;
+  font-size: 14px;
+  line-height: 1;
+}
+.focus-button[aria-pressed='true'] {
+  border-color: #b9cda2;
+  background: #eaf0df;
+  color: #31583f;
+}
+.focus-mode .sidebar {
+  display: none;
+}
+.app.focus-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
+.focus-mode .chat-column,
+.focus-mode .composer-area {
+  width: min(100% - 80px, 920px);
+}
+@media (max-width: 760px) {
+  .focus-button {
+    padding: 7px 9px;
+  }
+  .focus-button-label {
+    display: none;
+  }
+  .focus-mode .chat-column,
+  .focus-mode .composer-area {
+    width: calc(100% - 32px);
+  }
+}
