@@ -15,6 +15,10 @@ La revisión local combina `npm run security:audit`, pruebas de entradas malicio
 
 ## Límites pendientes de validación
 
+Los documentos locales se limitan a `.txt` y `.md` UTF-8, hasta 100 KB. Se rechazan archivos binarios y codificaciones inválidas, y las vistas previas y fuentes se muestran como texto, sin renderizar HTML. El modelo recibe fragmentos como datos separados de las instrucciones del sistema. Esto reduce la confusión entre contenido e instrucciones, pero no garantiza resistencia a prompt injection: un modelo puede seguir instrucciones maliciosas del documento o interpretar mal una fuente. No dispone de herramientas para ejecutar acciones.
+
+Solo se generan controles de referencia para identificadores de fragmentos realmente suministrados. Retirar un documento borra el archivo y las copias de fragmentos guardadas en los mensajes; las respuestas existentes pueden contener citas del texto. Las exportaciones JSON incluyen el archivo adjunto completo y las exportaciones Markdown incluyen fragmentos consultados.
+
 Las pruebas automatizadas de interfaz utilizan un motor simulado. La descarga completa y la inferencia WebGPU con la CSP deben verificarse en los navegadores objetivo. Si un proveedor cambia los dominios de descarga, revisa el bloqueo concreto antes de ampliar `connect-src`; no sustituyas la lista por un comodín general.
 
 El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensiones con permisos sobre la página o scripts del mismo origen. Los archivos de modelo y runtime externos siguen dependiendo de sus proveedores. No hay sincronización entre pestañas ni backend de cuentas.

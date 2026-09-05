@@ -27,6 +27,18 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 - Aviso de fallos de almacenamiento y conservación de mensajes en memoria para poder exportarlos.
 - Recuperación de respuestas interrumpidas al recargar y guardado periódico durante la generación.
 
+## Consultar un documento local
+
+1. Pulsa **＋ Documento** y selecciona un `.txt` o `.md` de hasta 100 KB, codificado en UTF-8.
+2. Revisa la vista previa y pulsa **Usar documento**. Se guarda junto a la conversación, incluso si todavía no hay mensajes.
+3. Con el modelo cargado, haz una pregunta concreta. La búsqueda selecciona hasta tres fragmentos por coincidencia de palabras, sin enviar el archivo a un servidor.
+4. Pulsa una referencia como `[1]` o un botón de **Fragmentos consultados** para ver el texto original. Una referencia que el modelo invente no se convierte en botón.
+5. Desmarca **Responder con este documento** para volver al chat general. **Retirar** borra el documento y sus fragmentos guardados tras una confirmación; los mensajes ya escritos pueden contener citas y se conservan. Elimina la conversación para borrarlos también.
+
+Si no hay coincidencias, la aplicación lo indica sin ejecutar inferencia. La búsqueda no es semántica: puede omitir sinónimos y no utiliza el historial para interpretar preguntas como «¿y eso?». Los resúmenes de documentos grandes son parciales y la interfaz lo advierte. Las referencias identifican material consultado, no certifican que la respuesta sea correcta.
+
+La exportación JSON incluye el documento completo mientras esté adjunto. Markdown incluye los fragmentos consultados en cada respuesta. Ambos archivos pueden contener información privada.
+
 ## Modelo, privacidad y límites
 
 - Modelo predeterminado: `Llama-3.2-1B-Instruct-q4f32_1-MLC`, fijado en `src/conversations.js`. Se ha elegido un modelo menor que el 8B original para reducir los requisitos. La calidad y velocidad dependen del modelo y del equipo.
@@ -60,6 +72,7 @@ Antes de publicar para otros usuarios, comprueba la carga y una respuesta real e
 - `src/storage.js`: transacciones de IndexedDB y cola de escrituras.
 - `src/conversations.js`: mensajes, contexto y exportación Markdown.
 - `src/markdown.js`: renderizado y saneamiento.
+- `src/documents.js`: lectura de texto, fragmentación, búsqueda local y selección de referencias.
 - `tests/`: pruebas funcionales y de integración con dependencias simuladas.
 
 ## Build y alojamiento
@@ -69,3 +82,5 @@ Antes de publicar para otros usuarios, comprueba la carga y una respuesta real e
 El motor WebLLM se importa solo al cargar el modelo. Vite puede avisar del tamaño de su paquete (incluye el runtime); el chat inicial y el historial no necesitan descargar ese módulo. Los pesos del modelo no se incluyen en `dist/`.
 
 Las dependencias directas están fijadas y `package-lock.json` permite instalaciones reproducibles.
+
+Las próximas funcionalidades propuestas y su división en commits están en [ROADMAP.md](ROADMAP.md).
