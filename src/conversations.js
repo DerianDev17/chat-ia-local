@@ -91,7 +91,7 @@ export function exportMarkdown(conversation) {
             message.sources
               .map(
                 (source) =>
-                  `Fuente [${source.id}] · ${source.name.replace(/[\r\n]/g, ' ')}\n\n` +
+                  `Fuente [${source.id}] · ${source.name.replace(/[\r\n]/g, ' ')}${source.page ? ` · Página ${source.page}` : ''}\n\n` +
                   source.text
                     .split('\n')
                     .map((line) => `> ${line}`)

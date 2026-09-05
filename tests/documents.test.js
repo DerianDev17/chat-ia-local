@@ -23,7 +23,7 @@ test('reads UTF-8 text and preserves original text and stable fragment offsets',
 });
 
 test('rejects unsupported, oversized, empty, invalid UTF-8 and binary files', async () => {
-  await assert.rejects(readDocument(file('texto', 'datos.pdf')), /\.txt o \.md/);
+  await assert.rejects(readDocument(file('texto', 'datos.docx')), /\.txt, \.md o \.pdf/);
   await assert.rejects(readDocument(file('x'.repeat(MAX_DOCUMENT_BYTES + 1))), /100 KB/);
   await assert.rejects(readDocument(file('   \n')), /vacío/);
   await assert.rejects(readDocument(file('abc\x00')), /binarios/);
