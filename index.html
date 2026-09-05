@@ -139,6 +139,16 @@
             <p id="load-detail" class="load-detail" role="status" hidden></p>
           </section>
           <form id="composer" class="composer">
+            <div id="document-card" class="document-card" hidden>
+              <div class="document-heading">
+                <button type="button" id="view-document" class="text-button"></button
+                ><button type="button" id="remove-document" class="text-button">Retirar</button>
+              </div>
+              <label class="document-toggle"
+                ><input id="use-document" type="checkbox" checked /> Responder con este
+                documento</label
+              >
+            </div>
             <label class="sr-only" for="prompt">Tu mensaje</label>
             <textarea
               id="prompt"
@@ -147,6 +157,23 @@
               maxlength="12000"
             ></textarea>
             <div class="composer-toolbar">
+              <button
+                id="attach-document"
+                type="button"
+                class="text-button"
+                title="Adjuntar .txt o .md, hasta 100 KB"
+                disabled
+              >
+                ＋ Documento
+              </button>
+              <input
+                id="document-file"
+                class="sr-only"
+                type="file"
+                accept=".txt,.md,text/plain,text/markdown"
+                tabindex="-1"
+                aria-label="Seleccionar documento"
+              />
               <span class="model-label"
                 ><span class="status-dot"></span>Llama 3.2 · 1B
                 <span class="local-badge">LOCAL</span></span
@@ -190,6 +217,30 @@
         </div>
       </div>
       <button id="delete-chat" class="danger-button">Eliminar conversación</button>
+    </dialog>
+    <dialog id="document-dialog" aria-labelledby="document-title">
+      <div class="dialog-heading">
+        <h2 id="document-title">Documento local</h2>
+        <button class="icon-button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p id="document-detail"></p>
+      <pre id="document-preview" class="document-preview" tabindex="0"></pre>
+      <p>
+        El texto se guarda en este navegador. Puedes retirarlo de la conversación cuando quieras.
+      </p>
+      <button id="confirm-document" class="primary-button" hidden>Usar documento</button>
+    </dialog>
+    <dialog id="source-dialog" aria-labelledby="source-title">
+      <div class="dialog-heading">
+        <h2 id="source-title">Fragmento original</h2>
+        <button class="icon-button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p id="source-detail"></p>
+      <pre id="source-text" class="document-preview" tabindex="0"></pre>
+      <p>
+        Esta referencia identifica un fragmento consultado; no garantiza que la respuesta lo
+        interprete correctamente.
+      </p>
     </dialog>
     <dialog id="privacy-dialog" aria-labelledby="privacy-title">
       <div class="dialog-heading">

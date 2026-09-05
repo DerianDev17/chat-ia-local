@@ -7,6 +7,7 @@ import {
   validatePrompt,
 } from './conversations.js';
 import { renderMarkdown } from './markdown.js';
+import { readDocument, buildDocumentContext, citedSources } from './documents.js';
 
 export function createApp({
   runtime,
@@ -27,9 +28,11 @@ export function createApp({
     storageError: false,
     stopping: false,
     drafts: new Map(),
+    attaching: false,
   };
   let notice = '';
   let saveTimer;
+  let pendingDocument = null;
   const announce = (text) => {
     $('#announcement').textContent = text;
   };
@@ -46,20 +49,31 @@ export function createApp({
 
   function updateControls() {
     $('#send').disabled =
-      !state.initialized || !runtime.ready || state.busy || !$('#prompt').value.trim();
+      !state.initialized ||
+      !runtime.ready ||
+      state.busy ||
+      state.attaching ||
+      !$('#prompt').value.trim();
     $('#send').hidden = state.busy;
     $('#stop').hidden = !state.busy;
     $('#stop').disabled = state.stopping;
     $('#stop').textContent = state.stopping ? 'Deteniendo…' : '■ Detener';
-    $('#new-chat').disabled = !state.initialized || state.busy;
-    $('#conversation-options').disabled = !state.current?.messages.length || state.busy;
-    $('#clear-data').disabled = state.busy || !state.initialized;
+    $('#new-chat').disabled = !state.initialized || state.busy || state.attaching;
+    $('#conversation-options').disabled =
+      (!state.current?.messages.length && !state.current?.document) ||
+      state.busy ||
+      state.attaching;
+    $('#clear-data').disabled = state.busy || state.attaching || !state.initialized;
+    $('#attach-document').disabled =
+      !state.initialized || state.busy || state.attaching || !!state.current?.document;
+    $('#remove-document').disabled = state.busy || state.attaching;
+    $('#use-document').disabled = state.busy || state.attaching;
     $('#load-model').disabled = !state.supported || state.busy;
     doc.querySelectorAll('.history-item').forEach((button) => {
-      button.disabled = state.busy;
+      button.disabled = state.busy || state.attaching;
     });
     doc.querySelectorAll('[data-retry]').forEach((button) => {
-      button.disabled = state.busy || state.loading || !state.supported;
+      button.disabled = state.busy || state.loading || state.attaching || !state.supported;
     });
     const engineState = state.busy
       ? 'generating'
@@ -82,7 +96,13 @@ export function createApp({
   }
 
   async function save(conversation = state.current) {
-    if (!conversation?.messages.length) return;
+    if (
+      !conversation ||
+      (!conversation.messages.length &&
+        !conversation.document &&
+        !state.conversations.includes(conversation))
+    )
+      return;
     try {
       await store.save(conversation);
       if (state.storageError) {
@@ -148,6 +168,38 @@ export function createApp({
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
       });
+      if (message.documentMode && message.status !== 'generating') {
+        const sources = new Map(citedSources(message).map((source) => [source.id, source]));
+        const walker = doc.createTreeWalker(element, window.NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) {
+          if (!walker.currentNode.parentElement.closest('pre,code,a'))
+            nodes.push(walker.currentNode);
+        }
+        for (const node of nodes) {
+          const matches = [...node.textContent.matchAll(/\[(\d+)\]/g)];
+          if (!matches.length) continue;
+          const fragment = doc.createDocumentFragment();
+          let offset = 0;
+          for (const match of matches) {
+            fragment.append(doc.createTextNode(node.textContent.slice(offset, match.index)));
+            const valid = sources.has(Number(match[1]));
+            const reference = doc.createElement(valid ? 'button' : 'span');
+            reference.className = valid ? 'citation-button' : 'unverified-citation';
+            reference.textContent = match[0];
+            if (valid) {
+              reference.type = 'button';
+              reference.dataset.source = match[1];
+              reference.dataset.message = message.id;
+              reference.setAttribute('aria-label', `Abrir fragmento ${match[1]}`);
+            } else reference.title = 'Referencia no disponible entre los fragmentos consultados';
+            fragment.append(reference);
+            offset = match.index + match[0].length;
+          }
+          fragment.append(doc.createTextNode(node.textContent.slice(offset)));
+          node.replaceWith(fragment);
+        }
+      }
     }
   }
 
@@ -166,6 +218,22 @@ export function createApp({
     content.className = 'message-content';
     fillContent(content, message);
     item.append(header, content);
+    if (message.sources?.length && message.status !== 'generating') {
+      const references = doc.createElement('div');
+      references.className = 'source-list';
+      const label = doc.createElement('span');
+      label.textContent = 'Fragmentos consultados:';
+      references.append(label);
+      for (const source of message.sources) {
+        const button = doc.createElement('button');
+        button.className = 'text-button';
+        button.textContent = `[${source.id}] ${source.name}`;
+        button.dataset.source = String(source.id);
+        button.dataset.message = message.id;
+        references.append(button);
+      }
+      item.append(references);
+    }
     if (message.role === 'assistant') {
       const actions = doc.createElement('div');
       actions.className = 'message-actions';
@@ -210,6 +278,7 @@ export function createApp({
     $('#welcome').hidden = messages.length > 0;
     $('#messages').hidden = !messages.length;
     $('#messages').replaceChildren(...messages.map(messageElement));
+    renderDocument();
     updateControls();
   }
 
@@ -238,7 +307,7 @@ export function createApp({
   }
 
   function selectConversation(conversation) {
-    if (state.busy) return;
+    if (state.busy || state.attaching) return;
     if (state.current) state.drafts.set(state.current.id, $('#prompt').value);
     state.current = conversation;
     $('#prompt').value = state.drafts.get(conversation.id) || '';
@@ -291,19 +360,30 @@ export function createApp({
     }
   }
 
-  async function generate(reply) {
+  function prepareContext(question) {
+    return state.current.document && state.current.useDocument !== false
+      ? buildDocumentContext(question, state.current.document)
+      : null;
+  }
+
+  async function generate(reply, documentContext = null) {
     const conversation = state.current;
-    const context = buildContext(conversation.messages);
+    const context = documentContext || buildContext(conversation.messages);
     state.busy = true;
     state.stopping = false;
     showNotice(
-      context.trimmed
-        ? 'Para mantener la conversación ágil, el modelo usa los intercambios recientes que caben en su contexto. El historial completo sigue guardado.'
-        : '',
+      documentContext
+        ? `Consulta del documento: ${context.sources.length} de ${conversation.document.chunks.length} fragmentos. ${context.summary && context.partial ? 'El resumen será parcial. ' : ''}La selección usa palabras de esta pregunta; las referencias no garantizan exactitud.`
+        : context.trimmed
+          ? 'Para mantener la conversación ágil, el modelo usa los intercambios recientes que caben en su contexto. El historial completo sigue guardado.'
+          : '',
     );
     reply.status = 'generating';
     reply.content = '';
     delete reply.finishReason;
+    reply.documentMode = !!documentContext;
+    if (documentContext) reply.sources = structuredClone(context.sources);
+    else delete reply.sources;
     renderConversation();
     renderHistory();
     scrollToEnd();
@@ -312,6 +392,13 @@ export function createApp({
     let lastRender = 0;
     let finishReason;
     try {
+      if (documentContext && !context.sources.length) {
+        reply.content =
+          'No encontré fragmentos relacionados con esta pregunta. Prueba con palabras del documento o desactiva «Responder con este documento» para usar el chat general.';
+        reply.status = 'complete';
+        announce('No se encontraron fragmentos relacionados.');
+        return;
+      }
       for await (const chunk of runtime.generate(context.messages)) {
         if (state.stopping) continue;
         const choice = chunk.choices?.[0];
@@ -368,7 +455,7 @@ export function createApp({
   }
 
   async function submit() {
-    if (!state.initialized || state.busy || !runtime.ready) return;
+    if (!state.initialized || state.busy || state.attaching || !runtime.ready) return;
     const text = $('#prompt').value.trim();
     const error = validatePrompt(text);
     if (error) {
@@ -376,9 +463,16 @@ export function createApp({
       return;
     }
     const conversation = state.current;
+    let documentContext;
+    try {
+      documentContext = prepareContext(text);
+    } catch (error) {
+      showNotice(error.message, 'error');
+      return;
+    }
     if (!conversation.messages.length) {
       conversation.title = text.replace(/\s+/g, ' ').slice(0, 65);
-      state.conversations.push(conversation);
+      if (!state.conversations.includes(conversation)) state.conversations.push(conversation);
     }
     conversation.messages.push(newMessage('user', text));
     const reply = newMessage('assistant', '', 'generating');
@@ -387,18 +481,25 @@ export function createApp({
     $('#prompt').value = '';
     state.drafts.delete(conversation.id);
     resizePrompt();
-    await generate(reply);
+    await generate(reply, documentContext);
   }
 
   async function retry(id) {
-    if (state.busy || state.loading) return;
+    if (state.busy || state.loading || state.attaching) return;
     const conversation = state.current;
     const reply = conversation.messages.at(-1);
     if (reply?.id !== id || reply.role !== 'assistant') return;
     if (!runtime.ready && !(await loadModel())) return;
     // The user may select another conversation while a model is downloading.
     if (state.current !== conversation) return;
-    await generate(reply);
+    let documentContext;
+    try {
+      documentContext = prepareContext(conversation.messages.at(-2).content);
+    } catch (error) {
+      showNotice(error.message, 'error');
+      return;
+    }
+    await generate(reply, documentContext);
   }
 
   function confirmDeletion(all) {
@@ -406,6 +507,8 @@ export function createApp({
     $('#confirm-title').textContent = all
       ? '¿Borrar todas las conversaciones?'
       : '¿Eliminar conversación?';
+    $('#confirm-description').textContent =
+      'Se eliminarán también los documentos y fragmentos guardados en la conversación. Puedes exportar una copia antes de eliminarla.';
     dialog.returnValue = '';
     dialog.showModal();
     dialog.querySelector('[value="cancel"]').focus();
@@ -417,7 +520,7 @@ export function createApp({
   }
 
   async function remove(all = false) {
-    if (state.busy || !(await confirmDeletion(all))) return;
+    if (state.busy || state.attaching || !(await confirmDeletion(all))) return;
     try {
       if (all) await store.clear();
       else await store.delete(state.current.id);
@@ -437,6 +540,7 @@ export function createApp({
     }
     $('#manage-dialog').close();
     $('#privacy-dialog').close();
+    state.current = null;
     selectConversation(newConversation());
     announce(all ? 'Historial eliminado.' : 'Conversación eliminada.');
   }
@@ -483,6 +587,113 @@ export function createApp({
     }
   }
 
+  function renderDocument() {
+    const document = state.current?.document;
+    $('#document-card').hidden = !document;
+    $('#view-document').textContent = document ? `▤ ${document.name}` : '';
+    $('#use-document').checked = state.current?.useDocument !== false;
+    $('#attach-document').title = document
+      ? 'Retira el documento actual antes de adjuntar otro'
+      : 'Adjuntar .txt o .md, hasta 100 KB';
+  }
+
+  function showDocument(document, pending = false) {
+    $('#document-title').textContent = document.name;
+    $('#document-detail').textContent =
+      `${Math.ceil(document.size / 1024)} KB · ${document.chunks.length} fragmentos · Texto UTF-8`;
+    $('#document-preview').textContent = document.text;
+    $('#confirm-document').hidden = !pending;
+    $('#document-dialog').showModal();
+  }
+
+  async function attachDocument(file) {
+    if (!state.initialized || state.busy || state.attaching || state.current.document) return;
+    state.attaching = true;
+    updateControls();
+    try {
+      const document = await readDocument(file);
+      pendingDocument = { document, conversation: state.current };
+      showDocument(document, true);
+    } catch (error) {
+      showNotice(error.message || 'No se pudo leer el archivo.', 'error');
+    } finally {
+      state.attaching = false;
+      $('#document-file').value = '';
+      updateControls();
+    }
+  }
+
+  async function acceptDocument() {
+    if (!pendingDocument || state.busy || pendingDocument.conversation !== state.current) return;
+    const { document, conversation } = pendingDocument;
+    conversation.document = document;
+    conversation.useDocument = true;
+    conversation.updatedAt = Date.now();
+    if (!conversation.messages.length) conversation.title = document.name;
+    if (!state.conversations.includes(conversation)) state.conversations.push(conversation);
+    pendingDocument = null;
+    $('#document-dialog').close();
+    renderConversation();
+    renderHistory();
+    await save(conversation);
+    if (!state.storageError)
+      showNotice('Documento listo. Haz una pregunta concreta o pide un resumen parcial.');
+    $('#prompt').focus();
+  }
+
+  async function removeDocument() {
+    if (state.busy || state.attaching || !state.current.document) return;
+    const conversation = state.current;
+    const confirmed = confirmDeletion(false);
+    $('#confirm-title').textContent = '¿Retirar el documento?';
+    $('#confirm-description').textContent =
+      'Se borrarán el archivo y sus fragmentos guardados. Los mensajes existentes pueden contener citas del texto; elimina la conversación para borrar también esos mensajes.';
+    if (!(await confirmed)) return;
+    const next = {
+      ...conversation,
+      useDocument: false,
+      updatedAt: Date.now(),
+      messages: conversation.messages.map((message) => {
+        const copy = { ...message };
+        delete copy.sources;
+        return copy;
+      }),
+    };
+    delete next.document;
+    state.attaching = true;
+    updateControls();
+    try {
+      await store.save(next);
+      delete conversation.document;
+      Object.assign(conversation, next);
+      $('#source-dialog').close();
+      $('#source-text').textContent = '';
+      $('#document-preview').textContent = '';
+      renderConversation();
+      renderHistory();
+      showNotice('Documento retirado. Los mensajes anteriores se conservan.');
+    } catch (error) {
+      showNotice(
+        'No se pudo retirar el documento del almacenamiento. Vuelve a intentarlo.',
+        'error',
+      );
+    } finally {
+      state.attaching = false;
+      updateControls();
+    }
+  }
+
+  function openSource(messageId, sourceId) {
+    const message = state.current.messages.find((entry) => entry.id === messageId);
+    const source = message?.sources?.find((entry) => entry.id === Number(sourceId));
+    if (!source) return;
+    $('#source-title').textContent = `Fragmento [${source.id}]`;
+    $('#source-detail').textContent =
+      `${source.name} · caracteres ${source.start + 1}–${source.end}`;
+    $('#source-text').textContent = source.text;
+    $('#source-dialog').showModal();
+  }
+
   async function start() {
     updateControls();
     sidebar(false, false);
@@ -491,6 +702,29 @@ export function createApp({
     $('#close-sidebar').addEventListener('click', () => sidebar(false));
     $('#sidebar-backdrop').addEventListener('click', () => sidebar(false));
     $('#search').addEventListener('input', renderHistory);
+    $('#attach-document').addEventListener('click', () => $('#document-file').click());
+    $('#document-file').addEventListener('change', () => {
+      const file = $('#document-file').files?.[0];
+      if (file) void attachDocument(file);
+    });
+    $('#confirm-document').addEventListener('click', () => void acceptDocument());
+    $('#document-dialog').addEventListener('close', () => {
+      pendingDocument = null;
+      $('#document-preview').textContent = '';
+    });
+    $('#source-dialog').addEventListener('close', () => {
+      $('#source-text').textContent = '';
+      $('#source-detail').textContent = '';
+    });
+    $('#view-document').addEventListener('click', () => {
+      if (state.current.document) showDocument(state.current.document);
+    });
+    $('#remove-document').addEventListener('click', () => void removeDocument());
+    $('#use-document').addEventListener('change', () => {
+      if (state.busy) return;
+      state.current.useDocument = $('#use-document').checked;
+      void save();
+    });
     $('#new-chat').addEventListener('click', () => selectConversation(newConversation()));
     $('#prompt').addEventListener('input', resizePrompt);
     $('#prompt').addEventListener('keydown', (event) => {
@@ -530,6 +764,8 @@ export function createApp({
       const retryButton = event.target.closest('[data-retry]');
       if (copy) void copyMessage(copy.dataset.copy, copy);
       if (retryButton) void retry(retryButton.dataset.retry);
+      const source = event.target.closest('[data-source]');
+      if (source) openSource(source.dataset.message, source.dataset.source);
     });
     $('#conversation-options').addEventListener('click', () => {
       $('#conversation-name').value = state.current.title;
@@ -626,5 +862,17 @@ export function createApp({
     updateControls();
   }
 
-  return { start, state, submit, retry, loadModel, selectConversation, remove, save };
+  return {
+    start,
+    state,
+    submit,
+    retry,
+    loadModel,
+    selectConversation,
+    remove,
+    save,
+    attachDocument,
+    acceptDocument,
+    removeDocument,
+  };
 }

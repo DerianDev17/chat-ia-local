@@ -284,3 +284,120 @@ test('cancelling a model download restores the load button without enabling send
   assert.equal(page.$('#send').disabled, true);
   page.close();
 });
+
+test('document preview is inert text; accepting it persists before any messages and does not duplicate history', async () => {
+  const factory = new IDBFactory();
+  const page = await setup({ factory });
+  const text = '<img src=x onerror=alert(1)> La garantía dura dos años.';
+  await page.app.attachDocument(new File([text], 'garantia.md'));
+  assert.equal(page.$('#document-preview').textContent, text);
+  assert.equal(page.$('#document-preview img'), null);
+  assert.equal((await page.store.list()).length, 0);
+  await page.app.acceptDocument();
+  assert.equal((await page.store.list())[0].document.text, text);
+  assert.equal(page.$('#conversation-options').disabled, false);
+  await page.app.loadModel();
+  page.$('#prompt').value = '¿Cuánto dura la garantía?';
+  await page.app.submit();
+  assert.equal(page.app.state.conversations.length, 1);
+  page.close();
+  const reopened = await setup({ factory });
+  assert.equal(reopened.$('#document-card').hidden, false);
+  assert.equal(reopened.app.state.current.document.text, text);
+  reopened.close();
+});
+
+test('document citations open only stored sources and survive reloading', async () => {
+  const factory = new IDBFactory();
+  const runtime = {
+    ready: true,
+    async *generate(messages) {
+      const request = JSON.parse(messages[1].content);
+      assert.equal(request.question, '¿Cuánto dura la garantía?');
+      assert.ok(request.fragments[0].text.includes('dos años'));
+      yield { choices: [{ delta: { content: 'Dura dos años [1]. Cita inventada [999].' } }] };
+    },
+  };
+  const page = await setup({ factory, runtime });
+  await page.app.attachDocument(new File(['La garantía dura dos años.'], 'garantia.txt'));
+  await page.app.acceptDocument();
+  page.$('#prompt').value = '¿Cuánto dura la garantía?';
+  await page.app.submit();
+  assert.ok(page.$('.citation-button[data-source="1"]'));
+  assert.equal(page.$('[data-source="999"]'), null);
+  assert.equal(page.$('.unverified-citation').textContent, '[999]');
+  page.$('.citation-button').click();
+  assert.equal(page.$('#source-text').textContent, 'La garantía dura dos años.');
+  page.$('#source-dialog').close();
+  assert.equal(page.$('#source-text').textContent, '');
+  page.close();
+  const reopened = await setup({ factory });
+  reopened.$('.citation-button').click();
+  assert.equal(reopened.$('#source-text').textContent, 'La garantía dura dos años.');
+  reopened.close();
+});
+
+test('questions without document matches skip inference and can switch to general chat', async () => {
+  let calls = 0;
+  const runtime = {
+    ready: true,
+    async *generate() {
+      calls++;
+      yield { choices: [{ delta: { content: 'Chat general' } }] };
+    },
+  };
+  const page = await setup({ runtime });
+  await page.app.attachDocument(new File(['Las ballenas viven en el océano.'], 'naturaleza.txt'));
+  await page.app.acceptDocument();
+  page.$('#prompt').value = '¿Cuánto cuesta el automóvil?';
+  await page.app.submit();
+  assert.equal(calls, 0);
+  assert.match(page.app.state.current.messages.at(-1).content, /No encontré fragmentos/);
+  page.$('#use-document').checked = false;
+  page.$('#use-document').dispatchEvent(new page.window.Event('change'));
+  page.$('#prompt').value = '¿Cuánto cuesta el automóvil?';
+  await page.app.submit();
+  assert.equal(calls, 1);
+  page.close();
+});
+
+test('removing a document requires confirmation and clears source snapshots from storage', async () => {
+  const page = await setup();
+  await page.app.loadModel();
+  await page.app.attachDocument(new File(['La garantía dura dos años.'], 'garantia.txt'));
+  await page.app.acceptDocument();
+  page.$('#prompt').value = 'garantía';
+  await page.app.submit();
+  assert.ok(page.app.state.current.messages.at(-1).sources.length);
+  const cancelled = page.app.removeDocument();
+  page.$('#confirm-dialog').close('cancel');
+  await cancelled;
+  assert.ok(page.app.state.current.document);
+  const removing = page.app.removeDocument();
+  page.$('#confirm-dialog').close('confirm');
+  await removing;
+  const stored = (await page.store.list())[0];
+  assert.equal(stored.document, undefined);
+  assert.ok(stored.messages.every((message) => !message.sources));
+  assert.equal(page.$('#document-card').hidden, true);
+  assert.equal(page.$('#attach-document').disabled, false);
+  page.close();
+});
+
+test('cancelling preview leaves no document, and oversized questions preserve the composer draft', async () => {
+  const page = await setup();
+  await page.app.attachDocument(new File(['La garantía dura dos años.'], 'garantia.txt'));
+  page.$('#document-dialog').close();
+  await page.app.acceptDocument();
+  assert.equal(page.app.state.current.document, undefined);
+  await page.app.attachDocument(new File(['La garantía dura dos años.'], 'garantia.txt'));
+  await page.app.acceptDocument();
+  await page.app.loadModel();
+  const text = 'garantía ' + 'x'.repeat(2500);
+  page.$('#prompt').value = text;
+  await page.app.submit();
+  assert.match(page.$('#notice').textContent, /Acorta la pregunta/);
+  assert.equal(page.$('#prompt').value, text);
+  assert.equal(page.app.state.current.messages.length, 0);
+  page.close();
+});
