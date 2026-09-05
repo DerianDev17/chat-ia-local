@@ -1,6 +1,8 @@
-# Local · Chat IA en tu navegador
+# Semilla Digital · Ideas que echan raíz
 
 Asistente en español para escribir, resumir y explicar textos. Ejecuta Llama 3.2 1B con WebLLM en un Web Worker. Las conversaciones se guardan en IndexedDB en el dispositivo.
+
+La identidad visual, los colores y los archivos de marca están en [BRAND.md](BRAND.md).
 
 ## Ejecutar
 

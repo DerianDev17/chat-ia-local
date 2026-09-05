@@ -133,7 +133,7 @@ export function createApp({
       empty.className = 'history-empty';
       empty.textContent = search
         ? 'No encontramos conversaciones.'
-        : 'Tus ideas tendrán un lugar aquí.';
+        : 'Cada conversación, un nuevo comienzo.';
       $('#history').append(empty);
     }
     for (const conversation of conversations) {
@@ -211,9 +211,17 @@ export function createApp({
     header.className = 'message-header';
     const avatar = doc.createElement('span');
     avatar.className = 'message-avatar';
-    avatar.textContent = message.role === 'user' ? 'T' : '✳';
+    if (message.role === 'user') avatar.textContent = 'T';
+    else {
+      const symbol = doc.createElement('img');
+      symbol.src = new URL('../assets/brand/symbol.svg', import.meta.url).href;
+      symbol.alt = '';
+      symbol.width = 28;
+      symbol.height = 28;
+      avatar.append(symbol);
+    }
     avatar.setAttribute('aria-hidden', 'true');
-    header.append(avatar, doc.createTextNode(message.role === 'user' ? 'Tú' : 'Local · Llama 3.2'));
+    header.append(avatar, doc.createTextNode(message.role === 'user' ? 'Tú' : 'Semilla Digital'));
     const content = doc.createElement('div');
     content.className = 'message-content';
     fillContent(content, message);

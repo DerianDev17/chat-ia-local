@@ -99,7 +99,7 @@ export function exportMarkdown(conversation) {
               )
               .join('\n\n')
           : '';
-        return `## ${message.role === 'user' ? 'Tú' : 'Local'}\n\n${message.content}${status}${sources}`;
+        return `## ${message.role === 'user' ? 'Tú' : 'Semilla Digital'}\n\n${message.content}${status}${sources}`;
       })
       .join('\n\n---\n\n') +
     '\n'

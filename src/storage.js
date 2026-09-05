@@ -18,7 +18,7 @@ export class ConversationStore {
         request.result.createObjectStore('conversations', { keyPath: 'id' });
       request.onerror = () => fail(request.error);
       request.onblocked = () =>
-        fail(new Error('Cierra otras pestañas de Local y vuelve a abrir esta página.'));
+        fail(new Error('Cierra otras pestañas de Semilla Digital y vuelve a abrir esta página.'));
       request.onsuccess = () => {
         if (failed) {
           request.result.close();

@@ -3,16 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#171a18" />
+    <meta name="theme-color" content="#183d2b" />
     <meta
       name="description"
-      content="Un espacio para escribir, resumir y pensar con IA que se ejecuta en tu navegador."
+      content="Semilla Digital: un espacio para cultivar tus ideas, escribir y consultar tus documentos con inteligencia artificial local."
     />
-    <title>Local — Tu espacio de ideas</title>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23c5e7b0'/%3E%3Cpath d='M22 18v28h23' fill='none' stroke='%23131615' stroke-width='7'/%3E%3C/svg%3E"
-    />
+    <title>Semilla Digital — Ideas que echan raíz</title>
+    <link rel="icon" href="./assets/brand/symbol.svg" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -20,9 +17,15 @@
     <div class="app">
       <aside class="sidebar" id="sidebar" aria-label="Conversaciones">
         <div class="brand-row">
-          <a class="brand" href="./" aria-label="Local, inicio"
-            ><span class="brand-mark">L<span>·</span></span
-            >local<span class="brand-dot">.</span></a
+          <a class="brand" href="./" aria-label="Semilla Digital, inicio"
+            ><img
+              class="brand-mark"
+              src="./assets/brand/symbol-inverse.svg"
+              alt=""
+              width="48"
+              height="48"
+            />
+            <span class="brand-wordmark"><span>semilla</span><small>DIGITAL</small></span></a
           ><button id="close-sidebar" class="icon-button mobile-only" aria-label="Cerrar menú">
             ×
           </button>
@@ -38,9 +41,9 @@
             placeholder="Buscar conversación"
             aria-label="Buscar conversación"
         /></label>
-        <div class="section-label">TUS CONVERSACIONES</div>
+        <div class="section-label">TU ESPACIO DE IDEAS</div>
         <nav id="history" class="history" aria-label="Historial">
-          <p class="history-empty">Tus ideas tendrán un lugar aquí.</p>
+          <p class="history-empty">Cada conversación, un nuevo comienzo.</p>
         </nav>
         <div class="sidebar-footer">
           <span class="device-icon" aria-hidden="true">▣</span>
@@ -69,7 +72,7 @@
             ☰
           </button>
           <div class="conversation-heading">
-            <span class="eyebrow">ESPACIO PERSONAL</span>
+            <span class="eyebrow">SEMILLA DIGITAL / ASISTENTE</span>
             <h1 id="chat-title">Nueva conversación</h1>
           </div>
           <div class="header-actions">
@@ -88,26 +91,27 @@
         <main id="chat-scroll" tabindex="-1">
           <div class="chat-column">
             <section id="welcome" class="welcome">
-              <div class="welcome-symbol" aria-hidden="true">✳</div>
-              <span class="eyebrow">UN POCO DE CLARIDAD, A TU MANERA</span>
-              <h2>¿Qué tienes<br />en mente?</h2>
+              <div class="welcome-kicker">
+                <span class="kicker-line" aria-hidden="true"></span
+                ><span class="eyebrow">IDEAS QUE ECHAN RAÍZ</span>
+              </div>
+              <h2>Una pequeña idea.<br /><em>Un nuevo comienzo.</em></h2>
               <p>
-                Un espacio para dar forma a tus ideas.<br />La inteligencia artificial se ejecuta en
-                tu navegador.
+                Escribe, encuentra claridad o explora tus documentos.<br />Empieza por lo que tienes
+                en mente.
               </p>
               <div class="suggestions">
                 <button data-prompt="Ayúdame a redactar un texto. Quiero escribir sobre: ">
                   <span class="suggestion-icon" aria-hidden="true">↗</span
-                  ><strong>Encuentra las palabras</strong
-                  ><span>De una idea a un primer borrador</span>
+                  ><strong>Dale forma a una idea</strong><span>Escribe tu primer borrador</span>
                 </button>
                 <button data-prompt="Resume el siguiente texto en sus ideas principales:&#10;&#10;">
                   <span class="suggestion-icon" aria-hidden="true">≡</span
-                  ><strong>Quédate con lo esencial</strong><span>Resume un texto con claridad</span>
+                  ><strong>Encuentra lo esencial</strong><span>Convierte un texto en claridad</span>
                 </button>
                 <button data-prompt="Explícame de forma sencilla y con un ejemplo: ">
                   <span class="suggestion-icon" aria-hidden="true">✧</span
-                  ><strong>Entiende algo nuevo</strong><span>Una explicación, paso a paso</span>
+                  ><strong>Abre una nueva pregunta</strong><span>Aprende algo, paso a paso</span>
                 </button>
               </div>
             </section>
@@ -152,7 +156,7 @@
             <label class="sr-only" for="prompt">Tu mensaje</label>
             <textarea
               id="prompt"
-              placeholder="Escribe lo que tienes en mente…"
+              placeholder="Planta una idea. Escribe aquí…"
               rows="1"
               maxlength="12000"
             ></textarea>
