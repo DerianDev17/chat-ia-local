@@ -113,7 +113,7 @@ export class LocalEngine {
     }
   }
 
-  async *generate(messages) {
+  async *generate(messages, { temperature = 0.7 } = {}) {
     if (!this.ready) throw new Error('Carga el modelo antes de enviar un mensaje.');
     const operation = new AbortController();
     this.operation = operation;
@@ -122,7 +122,7 @@ export class LocalEngine {
       const pending = this.engine.chat.completions.create({
         messages,
         stream: true,
-        temperature: 0.7,
+        temperature,
         max_tokens: 512,
       });
       const stream = await bounded(

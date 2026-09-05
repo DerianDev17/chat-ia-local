@@ -488,7 +488,9 @@ export function createApp({
         announce('No se encontraron fragmentos relacionados.');
         return;
       }
-      for await (const chunk of runtime.generate(context.messages)) {
+      for await (const chunk of runtime.generate(context.messages, {
+        temperature: documentContext ? 0 : 0.7,
+      })) {
         if (state.stopping) continue;
         const choice = chunk.choices?.[0];
         reply.content += choice?.delta?.content || '';
