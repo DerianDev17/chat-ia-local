@@ -583,3 +583,23 @@ test('focus mode expands the workspace and persists its preference', async () =>
   assert.equal(page.window.localStorage.getItem('semilla-focus-mode'), 'false');
   page.close();
 });
+
+test('persists and clears composer drafts without adding a conversation', async () => {
+  const page = await setup();
+  const conversationId = page.app.state.current.id;
+  const prompt = page.$('#prompt');
+  prompt.value = 'Borrador que quiero recuperar';
+  prompt.dispatchEvent(new page.window.Event('input'));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.deepEqual(JSON.parse(page.window.localStorage.getItem('semilla-drafts')), {
+    [conversationId]: 'Borrador que quiero recuperar',
+  });
+  assert.equal(page.$('#draft-status').textContent, 'Borrador guardado');
+  assert.equal(page.app.state.conversations.length, 0);
+
+  prompt.value = '';
+  prompt.dispatchEvent(new page.window.Event('input'));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.deepEqual(JSON.parse(page.window.localStorage.getItem('semilla-drafts')), {});
+  page.close();
+});

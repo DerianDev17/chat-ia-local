@@ -44,10 +44,16 @@ export function createApp({
   try {
     state.selectedModel = getModel(window.localStorage.getItem('semilla-model') || MODELS[0].id).id;
     state.focusMode = window.localStorage.getItem('semilla-focus-mode') === 'true';
+    const drafts = JSON.parse(window.localStorage.getItem('semilla-drafts') || '{}');
+    if (drafts && typeof drafts === 'object')
+      Object.entries(drafts).forEach(([id, text]) => {
+        if (typeof text === 'string' && text.length <= 12000) state.drafts.set(id, text);
+      });
   } catch {}
   let notice = '';
   let compatibilityFailureNotice = '';
   let saveTimer;
+  let draftTimer;
   let pendingDocument = null;
   let previewDocument = null;
   const announce = (text) => {
@@ -64,6 +70,55 @@ export function createApp({
     $('#notice').hidden = !storageWarning && !notice;
   }
 
+  function setDraftStatus(text = '') {
+    const status = $('#draft-status');
+    if (!status) return;
+    status.textContent = text;
+    status.hidden = !text;
+  }
+
+  function persistDrafts() {
+    try {
+      const drafts = Object.fromEntries(
+        [...state.drafts].filter(([, text]) => text).map(([id, text]) => [id, text]),
+      );
+      window.localStorage.setItem('semilla-drafts', JSON.stringify(drafts));
+      setDraftStatus(Object.keys(drafts).length ? 'Borrador guardado' : '');
+    } catch {
+      setDraftStatus('No se pudo guardar el borrador');
+    }
+  }
+
+  function scheduleDraftPersistence() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      draftTimer = null;
+      persistDrafts();
+    }, 250);
+  }
+
+  function rememberDraft(conversation) {
+    if (!conversation) return;
+    const text = $('#prompt').value;
+    if (text) state.drafts.set(conversation.id, text);
+    else {
+      state.drafts.delete(conversation.id);
+      setDraftStatus('');
+    }
+    scheduleDraftPersistence();
+  }
+
+  function clearDraft(id) {
+    state.drafts.delete(id);
+    scheduleDraftPersistence();
+  }
+
+  function flushDrafts() {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+    persistDrafts();
+  }
+
   function publishSync(message) {
     try {
       syncChannel?.postMessage(message);
@@ -74,7 +129,7 @@ export function createApp({
 
   function removeLocalConversation(id) {
     const current = state.current?.id === id;
-    state.drafts.delete(id);
+    clearDraft(id);
     state.conversations = state.conversations.filter((conversation) => conversation.id !== id);
     if (current && !state.busy) {
       state.current = newConversation();
@@ -458,9 +513,11 @@ export function createApp({
 
   function selectConversation(conversation) {
     if (state.busy || state.attaching) return;
-    if (state.current) state.drafts.set(state.current.id, $('#prompt').value);
+    if (state.current) rememberDraft(state.current);
     state.current = conversation;
-    $('#prompt').value = state.drafts.get(conversation.id) || '';
+    const draft = state.drafts.get(conversation.id) || '';
+    $('#prompt').value = draft;
+    setDraftStatus(draft ? 'Borrador recuperado' : '');
     showNotice();
     renderConversation();
     renderHistory();
@@ -695,7 +752,7 @@ export function createApp({
     conversation.messages.push(reply);
     conversation.updatedAt = Date.now();
     $('#prompt').value = '';
-    state.drafts.delete(conversation.id);
+    clearDraft(conversation.id);
     resizePrompt();
     await generate(reply, documentContext);
   }
@@ -764,8 +821,9 @@ export function createApp({
     if (all) {
       state.conversations = [];
       state.drafts.clear();
+      flushDrafts();
     } else {
-      state.drafts.delete(state.current.id);
+      clearDraft(state.current.id);
       state.conversations = state.conversations.filter(
         (conversation) => conversation.id !== state.current.id,
       );
@@ -1050,7 +1108,10 @@ export function createApp({
       void save();
     });
     $('#new-chat').addEventListener('click', () => selectConversation(newConversation()));
-    $('#prompt').addEventListener('input', resizePrompt);
+    $('#prompt').addEventListener('input', () => {
+      rememberDraft(state.current);
+      resizePrompt();
+    });
     $('#prompt').addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -1154,9 +1215,13 @@ export function createApp({
       }
     });
     doc.addEventListener('visibilitychange', () => {
-      if (doc.visibilityState === 'hidden') void save();
+      if (doc.visibilityState === 'hidden') {
+        flushDrafts();
+        void save();
+      }
     });
     window.addEventListener('beforeunload', (event) => {
+      flushDrafts();
       if (state.busy || state.storageError) {
         event.preventDefault();
         event.returnValue = '';
