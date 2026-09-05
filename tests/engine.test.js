@@ -54,3 +54,13 @@ test('worker generation errors release resources and allow another load', async 
   assert.equal(runtime.ready, false);
   assert.equal(terminated, true);
 });
+
+test('rejects unknown model ids before importing or disposing the current engine', async () => {
+  const runtime = new LocalEngine();
+  runtime.ready = true;
+  await assert.rejects(
+    runtime.load(() => {}, 'https://untrusted.example/model'),
+    /no permitido/,
+  );
+  assert.equal(runtime.ready, true);
+});

@@ -1,4 +1,5 @@
 import { MODEL_ID } from './conversations.js';
+import { getModel } from './models.js';
 
 export async function checkCompatibility(environment = globalThis) {
   if (!environment.isSecureContext)
@@ -66,9 +67,11 @@ function bounded(promise, signal, timeout, description) {
 export class LocalEngine {
   constructor() {
     this.ready = false;
+    this.modelId = null;
   }
 
-  async load(onProgress) {
+  async load(onProgress, modelId = MODEL_ID) {
+    getModel(modelId);
     this.dispose();
     const operation = new AbortController();
     this.operation = operation;
@@ -97,12 +100,13 @@ export class LocalEngine {
         },
       });
       await bounded(
-        Promise.race([this.engine.reload(MODEL_ID, { context_window_size: 4096 }), workerFailure]),
+        Promise.race([this.engine.reload(modelId, { context_window_size: 4096 }), workerFailure]),
         operation.signal,
         600000,
         'La descarga ha tardado demasiado. Comprueba tu conexión y vuelve a intentarlo.',
       );
       this.ready = true;
+      this.modelId = modelId;
     } catch (error) {
       this.dispose();
       throw error;
@@ -165,5 +169,6 @@ export class LocalEngine {
     this.worker = null;
     this.engine = null;
     this.ready = false;
+    this.modelId = null;
   }
 }
