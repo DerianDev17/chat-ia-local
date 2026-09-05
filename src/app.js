@@ -1,0 +1,630 @@
+import {
+  buildContext,
+  exportMarkdown,
+  newConversation,
+  newMessage,
+  recoverConversation,
+  validatePrompt,
+} from './conversations.js';
+import { renderMarkdown } from './markdown.js';
+
+export function createApp({
+  runtime,
+  store,
+  checkCompatibility,
+  document: doc = document,
+  render = renderMarkdown,
+}) {
+  const $ = (selector) => doc.querySelector(selector);
+  const window = doc.defaultView;
+  const state = {
+    conversations: [],
+    current: null,
+    busy: false,
+    loading: false,
+    initialized: false,
+    supported: false,
+    storageError: false,
+    stopping: false,
+    drafts: new Map(),
+  };
+  let notice = '';
+  let saveTimer;
+  const announce = (text) => {
+    $('#announcement').textContent = text;
+  };
+
+  function showNotice(text = '', kind = 'info') {
+    notice = text;
+    const storageWarning = state.storageError
+      ? 'No se pudo guardar el historial. Tus cambios permanecen en esta pestaña; exporta una copia antes de cerrarla. '
+      : '';
+    $('#notice').textContent = storageWarning + notice;
+    $('#notice').dataset.kind = kind;
+    $('#notice').hidden = !storageWarning && !notice;
+  }
+
+  function updateControls() {
+    $('#send').disabled =
+      !state.initialized || !runtime.ready || state.busy || !$('#prompt').value.trim();
+    $('#send').hidden = state.busy;
+    $('#stop').hidden = !state.busy;
+    $('#stop').disabled = state.stopping;
+    $('#stop').textContent = state.stopping ? 'Deteniendo…' : '■ Detener';
+    $('#new-chat').disabled = !state.initialized || state.busy;
+    $('#conversation-options').disabled = !state.current?.messages.length || state.busy;
+    $('#clear-data').disabled = state.busy || !state.initialized;
+    $('#load-model').disabled = !state.supported || state.busy;
+    doc.querySelectorAll('.history-item').forEach((button) => {
+      button.disabled = state.busy;
+    });
+    doc.querySelectorAll('[data-retry]').forEach((button) => {
+      button.disabled = state.busy || state.loading || !state.supported;
+    });
+    const engineState = state.busy
+      ? 'generating'
+      : state.loading
+        ? 'loading'
+        : runtime.ready
+          ? 'ready'
+          : state.supported
+            ? 'idle'
+            : 'error';
+    $('#engine-status').dataset.state = engineState;
+    $('#status-text').textContent = {
+      generating: 'Generando',
+      loading: 'Cargando',
+      ready: 'Listo',
+      idle: 'Sin cargar',
+      error: 'No compatible',
+    }[engineState];
+    $('#composer').setAttribute('aria-busy', String(state.busy));
+  }
+
+  async function save(conversation = state.current) {
+    if (!conversation?.messages.length) return;
+    try {
+      await store.save(conversation);
+      if (state.storageError) {
+        state.storageError = false;
+        showNotice(notice);
+      }
+    } catch (error) {
+      console.error('No se pudo guardar la conversación:', error);
+      state.storageError = true;
+      showNotice(notice, 'error');
+    }
+  }
+
+  function renderHistory() {
+    const search = $('#search').value.trim().toLocaleLowerCase('es');
+    const conversations = [...state.conversations]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .filter(
+        (conversation) =>
+          conversation.title.toLocaleLowerCase('es').includes(search) ||
+          conversation.messages.some((message) =>
+            message.content.toLocaleLowerCase('es').includes(search),
+          ),
+      );
+    $('#history').replaceChildren();
+    if (!conversations.length) {
+      const empty = doc.createElement('p');
+      empty.className = 'history-empty';
+      empty.textContent = search
+        ? 'No encontramos conversaciones.'
+        : 'Tus ideas tendrán un lugar aquí.';
+      $('#history').append(empty);
+    }
+    for (const conversation of conversations) {
+      const button = doc.createElement('button');
+      button.className = 'history-item';
+      button.dataset.id = conversation.id;
+      button.setAttribute('aria-current', String(conversation.id === state.current?.id));
+      button.disabled = state.busy;
+      const title = doc.createElement('strong');
+      title.textContent = conversation.title;
+      const time = doc.createElement('time');
+      time.dateTime = new Date(conversation.updatedAt).toISOString();
+      time.textContent = new Intl.DateTimeFormat('es', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(conversation.updatedAt);
+      button.append(title, time);
+      $('#history').append(button);
+    }
+  }
+
+  function fillContent(element, message) {
+    if (message.role === 'user') element.textContent = message.content;
+    else {
+      element.innerHTML = render(
+        message.content ||
+          (message.status === 'generating' ? 'Pensando…' : 'No se completó la respuesta.'),
+      );
+      element.querySelectorAll('a').forEach((link) => {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      });
+    }
+  }
+
+  function messageElement(message, index) {
+    const item = doc.createElement('li');
+    item.className = `message ${message.role}`;
+    item.dataset.messageId = message.id;
+    const header = doc.createElement('div');
+    header.className = 'message-header';
+    const avatar = doc.createElement('span');
+    avatar.className = 'message-avatar';
+    avatar.textContent = message.role === 'user' ? 'T' : '✳';
+    avatar.setAttribute('aria-hidden', 'true');
+    header.append(avatar, doc.createTextNode(message.role === 'user' ? 'Tú' : 'Local · Llama 3.2'));
+    const content = doc.createElement('div');
+    content.className = 'message-content';
+    fillContent(content, message);
+    item.append(header, content);
+    if (message.role === 'assistant') {
+      const actions = doc.createElement('div');
+      actions.className = 'message-actions';
+      if (message.content) {
+        const copy = doc.createElement('button');
+        copy.className = 'text-button';
+        copy.dataset.copy = message.id;
+        copy.textContent = 'Copiar';
+        actions.append(copy);
+      }
+      if (message.status !== 'generating' && index === state.current.messages.length - 1) {
+        const retry = doc.createElement('button');
+        retry.className = 'text-button';
+        retry.dataset.retry = message.id;
+        retry.disabled = state.busy || state.loading || !state.supported;
+        retry.textContent = message.status === 'complete' ? 'Volver a generar' : 'Reintentar';
+        actions.append(retry);
+      }
+      if (message.status !== 'complete') {
+        const status = doc.createElement('span');
+        status.className = 'message-state';
+        status.textContent = {
+          generating: 'Escribiendo…',
+          interrupted: 'Respuesta interrumpida',
+          error: 'No se pudo completar',
+        }[message.status];
+        actions.append(status);
+      } else if (message.finishReason === 'length') {
+        const status = doc.createElement('span');
+        status.className = 'message-state';
+        status.textContent = 'Límite de longitud alcanzado';
+        actions.append(status);
+      }
+      item.append(actions);
+    }
+    return item;
+  }
+
+  function renderConversation() {
+    $('#chat-title').textContent = state.current?.title || 'Nueva conversación';
+    const messages = state.current?.messages || [];
+    $('#welcome').hidden = messages.length > 0;
+    $('#messages').hidden = !messages.length;
+    $('#messages').replaceChildren(...messages.map(messageElement));
+    updateControls();
+  }
+
+  function scrollToEnd() {
+    $('#chat-scroll').scrollTop = $('#chat-scroll').scrollHeight;
+  }
+  function isNearEnd() {
+    const el = $('#chat-scroll');
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 110;
+  }
+  function resizePrompt() {
+    $('#prompt').style.height = 'auto';
+    $('#prompt').style.height = `${Math.min($('#prompt').scrollHeight, 150)}px`;
+    updateControls();
+  }
+
+  const mobile = window.matchMedia('(max-width: 760px)');
+  function sidebar(open, returnFocus = true) {
+    $('#sidebar').classList.toggle('is-open', open);
+    $('#sidebar-backdrop').hidden = !open || !mobile.matches;
+    $('#open-sidebar').setAttribute('aria-expanded', String(open));
+    $('#sidebar').inert = mobile.matches && !open;
+    $('.workspace').inert = mobile.matches && open;
+    if (open && mobile.matches) $('#close-sidebar').focus();
+    else if (returnFocus && mobile.matches) $('#open-sidebar').focus();
+  }
+
+  function selectConversation(conversation) {
+    if (state.busy) return;
+    if (state.current) state.drafts.set(state.current.id, $('#prompt').value);
+    state.current = conversation;
+    $('#prompt').value = state.drafts.get(conversation.id) || '';
+    showNotice();
+    renderConversation();
+    renderHistory();
+    resizePrompt();
+    sidebar(false, false);
+    scrollToEnd();
+    $('#prompt').focus();
+  }
+
+  async function loadModel() {
+    if (state.loading || state.busy || !state.supported) return false;
+    state.loading = true;
+    showNotice();
+    $('#model-card').hidden = false;
+    $('#model-title').textContent = 'Preparando Llama 3.2';
+    $('#model-description').textContent =
+      'La primera descarga puede tardar varios minutos. Puedes escribir mientras esperas.';
+    $('#load-model').textContent = 'Cancelar';
+    $('#load-progress').value = 0;
+    $('#load-progress').hidden = false;
+    $('#load-detail').hidden = false;
+    $('#load-detail').textContent = 'Conectando con el modelo…';
+    updateControls();
+    try {
+      await runtime.load((info) => {
+        $('#load-progress').value = Math.max(0, Math.min(1, info.progress));
+        $('#load-detail').textContent = `Preparando modelo · ${Math.round(info.progress * 100)} %`;
+      });
+      $('#model-card').hidden = true;
+      announce('Modelo listo. Ya puedes enviar tu mensaje.');
+      return true;
+    } catch (error) {
+      $('#model-title').textContent =
+        error.name === 'AbortError' ? 'Carga cancelada' : 'No se pudo cargar el modelo';
+      $('#model-description').textContent =
+        error.name === 'AbortError'
+          ? 'Puedes volver a cargarlo cuando quieras.'
+          : 'Comprueba la conexión y la memoria disponible. Cierra otras pestañas y vuelve a intentarlo.';
+      if (error.name !== 'AbortError') console.error('Carga del modelo:', error);
+      return false;
+    } finally {
+      state.loading = false;
+      $('#load-model').textContent = 'Cargar modelo';
+      $('#load-progress').hidden = true;
+      $('#load-detail').hidden = true;
+      updateControls();
+    }
+  }
+
+  async function generate(reply) {
+    const conversation = state.current;
+    const context = buildContext(conversation.messages);
+    state.busy = true;
+    state.stopping = false;
+    showNotice(
+      context.trimmed
+        ? 'Para mantener la conversación ágil, el modelo usa los intercambios recientes que caben en su contexto. El historial completo sigue guardado.'
+        : '',
+    );
+    reply.status = 'generating';
+    reply.content = '';
+    delete reply.finishReason;
+    renderConversation();
+    renderHistory();
+    scrollToEnd();
+    announce('Generando respuesta.');
+    void save(conversation);
+    let lastRender = 0;
+    let finishReason;
+    try {
+      for await (const chunk of runtime.generate(context.messages)) {
+        if (state.stopping) continue;
+        const choice = chunk.choices?.[0];
+        reply.content += choice?.delta?.content || '';
+        finishReason = choice?.finish_reason || finishReason;
+        if (Date.now() - lastRender > 60) {
+          const nearEnd = isNearEnd();
+          const content = [...$('#messages').children]
+            .find((item) => item.dataset.messageId === reply.id)
+            ?.querySelector('.message-content');
+          if (content) fillContent(content, reply);
+          if (nearEnd) scrollToEnd();
+          lastRender = Date.now();
+        }
+        if (!saveTimer)
+          saveTimer = setTimeout(() => {
+            saveTimer = null;
+            void save(conversation);
+          }, 800);
+      }
+      reply.status = state.stopping ? 'interrupted' : reply.content ? 'complete' : 'error';
+      if (finishReason === 'length') {
+        reply.finishReason = 'length';
+        showNotice('La respuesta alcanzó el límite de longitud. Puedes pedir que continúe.');
+      } else if (reply.status === 'error')
+        showNotice('El modelo no devolvió texto. Puedes reintentar la respuesta.', 'error');
+      announce(reply.status === 'complete' ? 'Respuesta completada.' : 'Respuesta interrumpida.');
+    } catch (error) {
+      console.error('Generación:', error);
+      reply.status = state.stopping ? 'interrupted' : 'error';
+      showNotice(
+        'No se pudo completar la respuesta. Tu mensaje se conserva; pulsa Reintentar para volver a cargar el modelo y responder.',
+        'error',
+      );
+      announce('No se pudo completar la respuesta.');
+    } finally {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      state.busy = false;
+      state.stopping = false;
+      conversation.updatedAt = Date.now();
+      const nearEnd = isNearEnd();
+      renderConversation();
+      renderHistory();
+      if (nearEnd) scrollToEnd();
+      if (!runtime.ready) {
+        $('#model-card').hidden = false;
+        $('#model-title').textContent = 'Vuelve a preparar el modelo';
+        $('#model-description').textContent =
+          'El motor se detuvo. Puedes cargarlo de nuevo y continuar con tu conversación.';
+      }
+      await save(conversation);
+    }
+  }
+
+  async function submit() {
+    if (!state.initialized || state.busy || !runtime.ready) return;
+    const text = $('#prompt').value.trim();
+    const error = validatePrompt(text);
+    if (error) {
+      showNotice(error, 'error');
+      return;
+    }
+    const conversation = state.current;
+    if (!conversation.messages.length) {
+      conversation.title = text.replace(/\s+/g, ' ').slice(0, 65);
+      state.conversations.push(conversation);
+    }
+    conversation.messages.push(newMessage('user', text));
+    const reply = newMessage('assistant', '', 'generating');
+    conversation.messages.push(reply);
+    conversation.updatedAt = Date.now();
+    $('#prompt').value = '';
+    state.drafts.delete(conversation.id);
+    resizePrompt();
+    await generate(reply);
+  }
+
+  async function retry(id) {
+    if (state.busy || state.loading) return;
+    const conversation = state.current;
+    const reply = conversation.messages.at(-1);
+    if (reply?.id !== id || reply.role !== 'assistant') return;
+    if (!runtime.ready && !(await loadModel())) return;
+    // The user may select another conversation while a model is downloading.
+    if (state.current !== conversation) return;
+    await generate(reply);
+  }
+
+  function confirmDeletion(all) {
+    const dialog = $('#confirm-dialog');
+    $('#confirm-title').textContent = all
+      ? '¿Borrar todas las conversaciones?'
+      : '¿Eliminar conversación?';
+    dialog.returnValue = '';
+    dialog.showModal();
+    dialog.querySelector('[value="cancel"]').focus();
+    return new Promise((resolve) =>
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), {
+        once: true,
+      }),
+    );
+  }
+
+  async function remove(all = false) {
+    if (state.busy || !(await confirmDeletion(all))) return;
+    try {
+      if (all) await store.clear();
+      else await store.delete(state.current.id);
+    } catch (error) {
+      console.error(error);
+      showNotice('No se pudieron borrar los datos del navegador. Vuelve a intentarlo.', 'error');
+      return;
+    }
+    if (all) {
+      state.conversations = [];
+      state.drafts.clear();
+    } else {
+      state.drafts.delete(state.current.id);
+      state.conversations = state.conversations.filter(
+        (conversation) => conversation.id !== state.current.id,
+      );
+    }
+    $('#manage-dialog').close();
+    $('#privacy-dialog').close();
+    selectConversation(newConversation());
+    announce(all ? 'Historial eliminado.' : 'Conversación eliminada.');
+  }
+
+  function download(format) {
+    const conversation = state.current;
+    const text =
+      format === 'json'
+        ? JSON.stringify({ schemaVersion: 1, ...conversation }, null, 2)
+        : exportMarkdown(conversation);
+    const blob = new Blob([text], {
+      type: format === 'json' ? 'application/json' : 'text/markdown;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = doc.createElement('a');
+    link.href = url;
+    link.download = `${
+      conversation.title
+        .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+        .trim()
+        .slice(0, 60) || 'conversacion'
+    }.${format}`;
+    doc.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function copyMessage(id, button) {
+    const message = state.current.messages.find((entry) => entry.id === id);
+    if (!message) return;
+    try {
+      await window.navigator.clipboard.writeText(message.content);
+      button.textContent = 'Copiado';
+      announce('Respuesta copiada.');
+      setTimeout(() => {
+        button.textContent = 'Copiar';
+      }, 1600);
+    } catch {
+      showNotice(
+        'No se pudo acceder al portapapeles. Selecciona el texto y cópialo manualmente.',
+        'error',
+      );
+    }
+  }
+
+  async function start() {
+    updateControls();
+    sidebar(false, false);
+    mobile.addEventListener('change', () => sidebar(false, false));
+    $('#open-sidebar').addEventListener('click', () => sidebar(true));
+    $('#close-sidebar').addEventListener('click', () => sidebar(false));
+    $('#sidebar-backdrop').addEventListener('click', () => sidebar(false));
+    $('#search').addEventListener('input', renderHistory);
+    $('#new-chat').addEventListener('click', () => selectConversation(newConversation()));
+    $('#prompt').addEventListener('input', resizePrompt);
+    $('#prompt').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        void submit();
+      }
+    });
+    $('#composer').addEventListener('submit', (event) => {
+      event.preventDefault();
+      void submit();
+    });
+    $('#stop').addEventListener('click', () => {
+      state.stopping = true;
+      runtime.stop();
+      updateControls();
+    });
+    $('#load-model').addEventListener('click', () =>
+      state.loading ? runtime.dispose() : void loadModel(),
+    );
+    $('#history').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-id]');
+      if (button)
+        selectConversation(
+          state.conversations.find((conversation) => conversation.id === button.dataset.id),
+        );
+    });
+    doc.querySelectorAll('[data-prompt]').forEach((button) =>
+      button.addEventListener('click', () => {
+        $('#prompt').value = button.dataset.prompt;
+        resizePrompt();
+        $('#prompt').focus();
+      }),
+    );
+    $('#messages').addEventListener('click', (event) => {
+      const copy = event.target.closest('[data-copy]');
+      const retryButton = event.target.closest('[data-retry]');
+      if (copy) void copyMessage(copy.dataset.copy, copy);
+      if (retryButton) void retry(retryButton.dataset.retry);
+    });
+    $('#conversation-options').addEventListener('click', () => {
+      $('#conversation-name').value = state.current.title;
+      $('#manage-dialog').showModal();
+    });
+    $('#rename-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = $('#conversation-name').value.trim();
+      if (!title) {
+        $('#conversation-name').setCustomValidity('Escribe un nombre.');
+        $('#conversation-name').reportValidity();
+        return;
+      }
+      state.current.title = title;
+      state.current.updatedAt = Date.now();
+      renderConversation();
+      renderHistory();
+      $('#manage-dialog').close();
+      await save();
+    });
+    $('#conversation-name').addEventListener('input', () =>
+      $('#conversation-name').setCustomValidity(''),
+    );
+    $('#export-md').addEventListener('click', () => download('md'));
+    $('#export-json').addEventListener('click', () => download('json'));
+    $('#delete-chat').addEventListener('click', () => void remove());
+    $('#clear-data').addEventListener('click', () => void remove(true));
+    $('#privacy').addEventListener('click', () => $('#privacy-dialog').showModal());
+    doc
+      .querySelectorAll('[data-close]')
+      .forEach((button) =>
+        button.addEventListener('click', () => button.closest('dialog').close()),
+      );
+    doc.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !doc.querySelector('dialog[open]')) sidebar(false);
+      if (event.altKey && event.key.toLowerCase() === 'n' && !doc.querySelector('dialog[open]')) {
+        event.preventDefault();
+        if (state.initialized) selectConversation(newConversation());
+      }
+      if (
+        event.key === 'Tab' &&
+        mobile.matches &&
+        $('#sidebar').classList.contains('is-open') &&
+        !doc.querySelector('dialog[open]')
+      ) {
+        const focusable = [
+          ...$('#sidebar').querySelectorAll('button:not(:disabled),a,input'),
+        ].filter((el) => !el.hidden);
+        const first = focusable[0],
+          last = focusable.at(-1);
+        if (event.shiftKey && doc.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && doc.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    });
+    doc.addEventListener('visibilitychange', () => {
+      if (doc.visibilityState === 'hidden') void save();
+    });
+    window.addEventListener('beforeunload', (event) => {
+      if (state.busy || state.storageError) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    });
+    const storageReady = (async () => {
+      try {
+        await store.open();
+        state.conversations = (await store.list()).map(recoverConversation);
+      } catch (error) {
+        console.error('Historial:', error);
+        state.storageError = true;
+        showNotice('', 'error');
+      }
+      state.initialized = true;
+      selectConversation(
+        [...state.conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0] || newConversation(),
+      );
+    })();
+    const compatibilityReady = (async () => {
+      const result = await checkCompatibility();
+      state.supported = result.supported;
+      if (!result.supported) {
+        $('#model-title').textContent = 'La IA local no está disponible';
+        $('#model-description').textContent = result.reason;
+        $('#load-model').textContent = 'No compatible';
+      }
+      updateControls();
+    })();
+    await Promise.all([storageReady, compatibilityReady]);
+    updateControls();
+  }
+
+  return { start, state, submit, retry, loadModel, selectConversation, remove, save };
+}
