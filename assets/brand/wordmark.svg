@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 104" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Semilla Digital</title>
+  <path d="M15 61C15 34 29 22 55 22C55 48 43 62 16 62Z" fill="#31583F"/>
+  <path d="M23 54L45 32" stroke="#F6F3EB" stroke-width="4" stroke-linecap="round"/>
+  <rect x="54" y="61" width="13" height="13" rx="2" fill="#B85532"/>
+  <text x="88" y="56" fill="#203A2C" font-family="Georgia,serif" font-size="48" letter-spacing="-2">semilla</text>
+  <text x="92" y="81" fill="#31583F" font-family="Arial,sans-serif" font-size="14" letter-spacing="7">DIGITAL</text>
+</svg>
