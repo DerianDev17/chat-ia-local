@@ -9,7 +9,7 @@ import { ConversationStore } from '../src/storage.js';
 import { renderMarkdown } from '../src/markdown.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-async function setup({ runtime, factory = new IDBFactory(), supported = true } = {}) {
+async function setup({ runtime, cache, factory = new IDBFactory(), supported = true } = {}) {
   const dom = new JSDOM(html, { url: 'http://localhost:5173' });
   const { window } = dom;
   window.matchMedia = () => ({ matches: false, addEventListener() {} });
@@ -38,6 +38,7 @@ async function setup({ runtime, factory = new IDBFactory(), supported = true } =
   };
   const app = createApp({
     runtime: fake,
+    cache,
     store,
     document: window.document,
     checkCompatibility: async () => ({ supported, reason: 'WebGPU no disponible.' }),
@@ -399,5 +400,115 @@ test('cancelling preview leaves no document, and oversized questions preserve th
   assert.match(page.$('#notice').textContent, /Acorta la pregunta/);
   assert.equal(page.$('#prompt').value, text);
   assert.equal(page.app.state.current.messages.length, 0);
+  page.close();
+});
+
+test('model changes unload GPU, preserve messages and forward the selected id to loading', async () => {
+  const page = await setup({
+    cache: {
+      async status() {
+        return false;
+      },
+    },
+  });
+  await page.app.loadModel();
+  page.$('#prompt').value = 'Hola';
+  await page.app.submit();
+  const original = structuredClone(page.app.state.current.messages);
+  page.$('#model-select').value = 'Llama-3.2-3B-Instruct-q4f32_1-MLC';
+  page.$('#model-select').dispatchEvent(new page.window.Event('change'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(page.runtime.ready, false);
+  assert.deepEqual(page.app.state.current.messages, original);
+  let model;
+  page.runtime.load = async (progress, id) => {
+    model = id;
+    page.runtime.ready = true;
+  };
+  await page.app.loadModel();
+  assert.equal(model, 'Llama-3.2-3B-Instruct-q4f32_1-MLC');
+  page.$('#prompt').value = 'Otra pregunta';
+  await page.app.submit();
+  assert.equal(page.app.state.current.messages.at(-1).model, model);
+  assert.notEqual(page.app.state.current.messages[1].model, model);
+  page.close();
+});
+
+test('cache deletion is confirmed, targeted and preserves stored conversations', async () => {
+  const removed = [];
+  const page = await setup({
+    cache: {
+      async status() {
+        return true;
+      },
+      async remove(id) {
+        removed.push(id);
+      },
+    },
+  });
+  await page.app.loadModel();
+  page.$('#prompt').value = 'Conservar este mensaje';
+  await page.app.submit();
+  const before = await page.store.list();
+  const cancelled = page.app.deleteModelCache();
+  page.$('#confirm-dialog').close('cancel');
+  await cancelled;
+  assert.equal(removed.length, 0);
+  const deletion = page.app.deleteModelCache();
+  page.$('#confirm-dialog').close('confirm');
+  await deletion;
+  assert.deepEqual(removed, [page.app.state.selectedModel]);
+  assert.equal(page.runtime.ready, false);
+  assert.deepEqual(await page.store.list(), before);
+  assert.match(page.$('#cache-status').textContent, /eliminada/);
+  page.close();
+});
+
+test('PDF page selection persists and citations display the correct page after reload', async () => {
+  const { documentFromPages } = await import('../src/documents.js');
+  const factory = new IDBFactory();
+  const page = await setup({ factory });
+  page.app.state.current.document = documentFromPages({ name: 'proyecto.pdf', size: 100 }, [
+    { page: 1, text: 'Precio 120 euros' },
+    { page: 2, text: 'Entrega septiembre' },
+  ]);
+  page.app.state.current.useDocument = true;
+  page.app.state.conversations.push(page.app.state.current);
+  page.app.selectConversation(page.app.state.current);
+  page.$('#page-scope').value = '2';
+  page.$('#page-scope').dispatchEvent(new page.window.Event('change'));
+  await page.app.loadModel();
+  page.$('#prompt').value = 'Resume';
+  await page.app.submit();
+  assert.ok(page.app.state.current.messages.at(-1).sources.every((source) => source.page === 2));
+  page.close();
+  const restored = await setup({ factory });
+  assert.equal(restored.$('#page-scope').value, '2');
+  restored.$('[data-source]').click();
+  assert.match(restored.$('#source-title').textContent, /Página 2/);
+  assert.match(restored.$('#source-text').textContent, /septiembre/);
+  restored.close();
+});
+
+test('cache failures release controls and cache maintenance blocks generation', async () => {
+  let finish;
+  const page = await setup({
+    cache: {
+      status: () =>
+        new Promise((_, reject) => {
+          finish = reject;
+        }),
+    },
+  });
+  await page.app.loadModel();
+  page.$('#prompt').value = 'Hola';
+  const refreshing = page.app.refreshCache();
+  await page.app.submit();
+  assert.equal(page.app.state.current.messages.length, 0);
+  assert.equal(page.$('#model-select').disabled, true);
+  finish(new Error('Storage unavailable'));
+  await refreshing;
+  assert.equal(page.$('#model-select').disabled, false);
+  assert.match(page.$('#cache-status').textContent, /No se pudo/);
   page.close();
 });

@@ -152,6 +152,10 @@
                 ><input id="use-document" type="checkbox" checked /> Responder con este
                 documento</label
               >
+              <label id="page-scope-label" hidden
+                >Consultar
+                <select id="page-scope" aria-label="Páginas a consultar"></select
+              ></label>
             </div>
             <label class="sr-only" for="prompt">Tu mensaje</label>
             <textarea
@@ -165,7 +169,7 @@
                 id="attach-document"
                 type="button"
                 class="text-button"
-                title="Adjuntar .txt o .md, hasta 100 KB"
+                title="Texto hasta 100 KB o PDF hasta 10 MB / 100 páginas"
                 disabled
               >
                 ＋ Documento
@@ -174,13 +178,17 @@
                 id="document-file"
                 class="sr-only"
                 type="file"
-                accept=".txt,.md,text/plain,text/markdown"
+                accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
                 tabindex="-1"
                 aria-label="Seleccionar documento"
               />
-              <span class="model-label"
-                ><span class="status-dot"></span>Llama 3.2 · 1B
-                <span class="local-badge">LOCAL</span></span
+              <button
+                type="button"
+                id="manage-models"
+                class="text-button model-label"
+                aria-label="Administrar modelos y caché"
+              >
+                <span id="selected-model-name">Llama 3.2 · 1B</span> ⚙</button
               ><button
                 id="send"
                 type="submit"
@@ -199,6 +207,30 @@
         </div>
       </section>
     </div>
+    <dialog id="models-dialog" aria-labelledby="models-title">
+      <div class="dialog-heading">
+        <h2 id="models-title">Modelos y caché</h2>
+        <button class="icon-button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p>
+        Elige el motor de tus ideas. Cada modelo se descarga en este navegador y necesita memoria de
+        la GPU disponible.
+      </p>
+      <label for="model-select">Modelo activo</label
+      ><select id="model-select"></select>
+      <p id="model-spec"></p>
+      <p id="cache-status" role="status"></p>
+      <p id="storage-usage"></p>
+      <div class="button-row">
+        <button id="unload-model" class="secondary-button">Liberar memoria GPU</button
+        ><button id="refresh-cache" class="secondary-button">Actualizar estado</button>
+      </div>
+      <button id="delete-model-cache" class="danger-button">Borrar caché de este modelo</button>
+      <p>
+        La caché permite reutilizar descargas. El navegador puede eliminarla si necesita espacio.
+        Borrarla conserva tus conversaciones y documentos.
+      </p>
+    </dialog>
     <dialog id="manage-dialog" aria-labelledby="manage-title">
       <form id="rename-form">
         <div class="dialog-heading">
@@ -228,9 +260,14 @@
         <button class="icon-button" data-close aria-label="Cerrar">×</button>
       </div>
       <p id="document-detail"></p>
+      <label id="preview-page-label" hidden
+        >Página
+        <select id="preview-page" aria-label="Página del PDF"></select
+      ></label>
       <pre id="document-preview" class="document-preview" tabindex="0"></pre>
       <p>
-        El texto se guarda en este navegador. Puedes retirarlo de la conversación cuando quieras.
+        El texto se guarda en este navegador. En PDF se conserva el texto por página, sin imágenes
+        ni el archivo original. Puedes retirarlo de la conversación cuando quieras.
       </p>
       <button id="confirm-document" class="primary-button" hidden>Usar documento</button>
     </dialog>
@@ -241,6 +278,10 @@
       </div>
       <p id="source-detail"></p>
       <pre id="source-text" class="document-preview" tabindex="0"></pre>
+      <details id="source-page-section" hidden>
+        <summary id="source-page-heading"></summary>
+        <pre id="source-page-text" class="document-preview" tabindex="0"></pre>
+      </details>
       <p>
         Esta referencia identifica un fragmento consultado; no garantiza que la respuesta lo
         interprete correctamente.

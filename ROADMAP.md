@@ -1,6 +1,6 @@
 # Próximas funcionalidades
 
-La primera consulta de documentos `.txt`/`.md` ya está implementada. Estas son propuestas para siguientes entregas; no forman parte de la implementación actual.
+Ya están implementadas la consulta de texto y PDF por páginas y la administración de modelos/caché. Las siguientes propuestas pendientes son importar copias y editar preguntas.
 
 ## 1. Importar copias de seguridad — esfuerzo bajo/medio
 
@@ -30,34 +30,12 @@ La primera consulta de documentos `.txt`/`.md` ya está implementada. Estas son 
 
 **Terminado cuando:** editar no destruya la conversación original y cada versión pueda exportarse y eliminarse por separado.
 
-## 3. Administrar modelos y almacenamiento — esfuerzo medio
+## Entregadas: modelos y PDF
 
-**Valor:** elegir entre velocidad y calidad, y controlar el espacio que ocupa la IA.
+- Catálogo Llama 3.2 1B/3B, selección persistente, carga explícita, cancelación y liberación de GPU.
+- Consulta y eliminación confirmada de caché por modelo, con estimación del almacenamiento del sitio.
+- Extracción local en Worker de PDF con texto: 10 MB, 100 páginas, 512 KB extraídos y límite de 30 segundos.
+- Vista del texto por página, filtro de consulta y referencias con número de página, conservadas en el historial y exportaciones.
+- Pruebas de selección, conservación del historial, borrado de caché, PDF real, páginas vacías, archivos inválidos y límites.
 
-**Alcance:** catálogo pequeño de modelos compatibles con la versión fijada de WebLLM, requisitos orientativos, descarga explícita, cambio de modelo y eliminación de su caché. Cambiar el modelo no debe borrar conversaciones.
-
-**Commits sugeridos:**
-
-1. `feat: define supported model catalog and requirements` — identificadores, límites y persistencia del modelo elegido.
-2. `feat: manage model downloads and cache` — progreso, cancelación, selección y eliminación confirmada.
-3. `test: validate model switching and cache recovery` — fallos de memoria, descarga e interrupción.
-
-**Terminado cuando:** dos modelos se puedan alternar en equipos compatibles sin mezclar operaciones ni perder historial. Requiere pruebas reales de GPU.
-
-## 4. Consultar PDF con referencias a páginas — esfuerzo medio/alto
-
-**Valor:** trabajar con manuales y documentos de uso cotidiano.
-
-**Alcance:** extraer texto de PDF local en un Worker, conservar números de página y abrir las fuentes en la página correspondiente. Empezar por PDF con texto seleccionable; detectar y explicar cuándo un archivo escaneado necesita OCR.
-
-**Commits sugeridos:**
-
-1. `feat: extract bounded PDF text in a worker` — parser actualizado, límites de páginas, memoria y tiempo.
-2. `feat: cite PDF pages in document answers` — fragmentos con página y visor de referencias.
-3. `test: cover malformed encrypted and scanned PDFs` — errores controlados y regresiones de seguridad.
-
-**Terminado cuando:** las referencias lleven a páginas correctas y los archivos incompatibles fallen sin bloquear la interfaz.
-
-## Orden recomendado
-
-Importar copias de seguridad → editar preguntas → administrar modelos → PDF. Antes de ampliar el alcance, validar la inferencia real, la CSP y la interfaz en navegadores y equipos objetivo.
+Ampliaciones futuras: OCR, visor de la maquetación original y búsqueda semántica. La compatibilidad de GPU debe seguir validándose en los equipos objetivo, especialmente para el modelo 3B.

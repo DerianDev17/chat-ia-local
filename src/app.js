@@ -1,3 +1,4 @@
+import { MODELS, getModel, modelCache } from './models.js';
 import {
   buildContext,
   exportMarkdown,
@@ -11,6 +12,7 @@ import { readDocument, buildDocumentContext, citedSources } from './documents.js
 
 export function createApp({
   runtime,
+  cache = modelCache,
   store,
   checkCompatibility,
   document: doc = document,
@@ -29,10 +31,16 @@ export function createApp({
     stopping: false,
     drafts: new Map(),
     attaching: false,
+    cacheBusy: false,
+    selectedModel: MODELS[0].id,
   };
+  try {
+    state.selectedModel = getModel(window.localStorage.getItem('semilla-model') || MODELS[0].id).id;
+  } catch {}
   let notice = '';
   let saveTimer;
   let pendingDocument = null;
+  let previewDocument = null;
   const announce = (text) => {
     $('#announcement').textContent = text;
   };
@@ -48,9 +56,18 @@ export function createApp({
   }
 
   function updateControls() {
+    const locked = state.busy || state.loading || state.attaching || state.cacheBusy;
+    $('#manage-models').disabled = locked;
+    $('#model-select').disabled = locked;
+    $('#delete-model-cache').disabled = locked;
+    $('#refresh-cache').disabled = locked;
+    $('#unload-model').disabled = locked || !runtime.ready;
+    $('#selected-model-name').textContent = getModel(state.selectedModel).name;
+
     $('#send').disabled =
       !state.initialized ||
       !runtime.ready ||
+      state.cacheBusy ||
       state.busy ||
       state.attaching ||
       !$('#prompt').value.trim();
@@ -68,7 +85,8 @@ export function createApp({
       !state.initialized || state.busy || state.attaching || !!state.current?.document;
     $('#remove-document').disabled = state.busy || state.attaching;
     $('#use-document').disabled = state.busy || state.attaching;
-    $('#load-model').disabled = !state.supported || state.busy;
+    $('#load-model').disabled =
+      !state.supported || state.busy || state.cacheBusy || state.attaching;
     doc.querySelectorAll('.history-item').forEach((button) => {
       button.disabled = state.busy || state.attaching;
     });
@@ -235,7 +253,7 @@ export function createApp({
       for (const source of message.sources) {
         const button = doc.createElement('button');
         button.className = 'text-button';
-        button.textContent = `[${source.id}] ${source.name}`;
+        button.textContent = `[${source.id}] ${source.name}${source.page ? ` · Página ${source.page}` : ''}`;
         button.dataset.source = String(source.id);
         button.dataset.message = message.id;
         references.append(button);
@@ -324,16 +342,76 @@ export function createApp({
     renderHistory();
     resizePrompt();
     sidebar(false, false);
-    scrollToEnd();
+    if (conversation.messages.length) scrollToEnd();
+    else $('#chat-scroll').scrollTop = 0;
     $('#prompt').focus();
   }
 
+  function unloadModel() {
+    runtime.dispose();
+    $('#model-card').hidden = false;
+    $('#model-title').textContent = `Prepara ${getModel(state.selectedModel).name}`;
+    $('#model-description').textContent =
+      'Carga el modelo para continuar. Las descargas guardadas se reutilizarán cuando estén disponibles.';
+    updateControls();
+  }
+
+  async function refreshCache() {
+    if (state.cacheBusy) return;
+    state.cacheBusy = true;
+    updateControls();
+    $('#model-spec').textContent = getModel(state.selectedModel).detail;
+    $('#cache-status').textContent = 'Comprobando caché…';
+    $('#storage-usage').textContent = '';
+    try {
+      const present = await cache.status(state.selectedModel);
+      $('#cache-status').textContent = present
+        ? 'Caché detectada. La carga verificará los archivos necesarios.'
+        : 'No se detectó caché de este modelo.';
+      const estimate = await window.navigator.storage?.estimate?.();
+      if (estimate?.usage !== undefined)
+        $('#storage-usage').textContent =
+          `Todo el sitio: ${(estimate.usage / 1048576).toFixed(1)} MB usados${estimate.quota ? ` de ${(estimate.quota / 1073741824).toFixed(1)} GB disponibles como cuota` : ''}. Incluye historial, documentos y modelos.`;
+    } catch {
+      $('#cache-status').textContent =
+        'No se pudo consultar el almacenamiento. Puedes volver a intentarlo.';
+    } finally {
+      state.cacheBusy = false;
+      updateControls();
+    }
+  }
+
+  async function deleteModelCache() {
+    if (state.busy || state.loading || state.attaching || state.cacheBusy) return;
+    const id = state.selectedModel;
+    const confirmed = confirmDeletion(false);
+    $('#confirm-title').textContent = `¿Borrar caché de ${getModel(id).name}?`;
+    $('#confirm-description').textContent =
+      'Se liberará la memoria del modelo y se borrarán sus descargas. Necesitarás internet para volver a cargarlo. Tus conversaciones y documentos se conservan.';
+    if (!(await confirmed)) return;
+    if (state.busy || state.loading || state.cacheBusy) return;
+    state.cacheBusy = true;
+    unloadModel();
+    try {
+      await cache.remove(id);
+      $('#cache-status').textContent =
+        'Caché eliminada. El modelo se descargará en la próxima carga.';
+      $('#storage-usage').textContent = '';
+    } catch {
+      $('#cache-status').textContent = 'No se pudo borrar toda la caché. Vuelve a intentarlo.';
+    } finally {
+      state.cacheBusy = false;
+      updateControls();
+    }
+  }
+
   async function loadModel() {
-    if (state.loading || state.busy || !state.supported) return false;
+    if (state.loading || state.busy || state.attaching || state.cacheBusy || !state.supported)
+      return false;
     state.loading = true;
     showNotice();
     $('#model-card').hidden = false;
-    $('#model-title').textContent = 'Preparando Llama 3.2';
+    $('#model-title').textContent = `Preparando ${getModel(state.selectedModel).name}`;
     $('#model-description').textContent =
       'La primera descarga puede tardar varios minutos. Puedes escribir mientras esperas.';
     $('#load-model').textContent = 'Cancelar';
@@ -346,7 +424,7 @@ export function createApp({
       await runtime.load((info) => {
         $('#load-progress').value = Math.max(0, Math.min(1, info.progress));
         $('#load-detail').textContent = `Preparando modelo · ${Math.round(info.progress * 100)} %`;
-      });
+      }, state.selectedModel);
       $('#model-card').hidden = true;
       announce('Modelo listo. Ya puedes enviar tu mensaje.');
       return true;
@@ -370,7 +448,7 @@ export function createApp({
 
   function prepareContext(question) {
     return state.current.document && state.current.useDocument !== false
-      ? buildDocumentContext(question, state.current.document)
+      ? buildDocumentContext(question, state.current.document, state.current.documentPage || null)
       : null;
   }
 
@@ -386,6 +464,9 @@ export function createApp({
           ? 'Para mantener la conversación ágil, el modelo usa los intercambios recientes que caben en su contexto. El historial completo sigue guardado.'
           : '',
     );
+    reply.documentPage = documentContext ? conversation.documentPage || null : null;
+    reply.model = state.selectedModel;
+    conversation.model = state.selectedModel;
     reply.status = 'generating';
     reply.content = '';
     delete reply.finishReason;
@@ -463,7 +544,8 @@ export function createApp({
   }
 
   async function submit() {
-    if (!state.initialized || state.busy || state.attaching || !runtime.ready) return;
+    if (!state.initialized || state.busy || state.attaching || state.cacheBusy || !runtime.ready)
+      return;
     const text = $('#prompt').value.trim();
     const error = validatePrompt(text);
     if (error) {
@@ -493,7 +575,7 @@ export function createApp({
   }
 
   async function retry(id) {
-    if (state.busy || state.loading || state.attaching) return;
+    if (state.busy || state.loading || state.attaching || state.cacheBusy) return;
     const conversation = state.current;
     const reply = conversation.messages.at(-1);
     if (reply?.id !== id || reply.role !== 'assistant') return;
@@ -602,14 +684,36 @@ export function createApp({
     $('#use-document').checked = state.current?.useDocument !== false;
     $('#attach-document').title = document
       ? 'Retira el documento actual antes de adjuntar otro'
-      : 'Adjuntar .txt o .md, hasta 100 KB';
+      : 'Texto hasta 100 KB o PDF hasta 10 MB / 100 páginas';
+    $('#page-scope-label').hidden = !document?.pages;
+    $('#page-scope').replaceChildren(
+      new window.Option('Todas las páginas', ''),
+      ...(document?.pages || []).map(
+        (entry) =>
+          new window.Option(
+            `Página ${entry.page}${entry.text ? '' : ' · sin texto'}`,
+            String(entry.page),
+          ),
+      ),
+    );
+    $('#page-scope').value = String(state.current?.documentPage || '');
+    $('#page-scope').disabled = state.busy || state.attaching;
   }
 
   function showDocument(document, pending = false) {
+    previewDocument = document;
+    $('#preview-page-label').hidden = !document.pages;
+    $('#preview-page').replaceChildren(
+      ...(document.pages || []).map(
+        (entry) => new window.Option(String(entry.page), String(entry.page)),
+      ),
+    );
     $('#document-title').textContent = document.name;
     $('#document-detail').textContent =
-      `${Math.ceil(document.size / 1024)} KB · ${document.chunks.length} fragmentos · Texto UTF-8`;
-    $('#document-preview').textContent = document.text;
+      `${Math.ceil(document.size / 1024)} KB · ${document.chunks.length} fragmentos · ${document.pages ? `${document.pages.length} páginas · Texto extraído (sin OCR)` : 'Texto UTF-8'}`;
+    $('#document-preview').textContent = document.pages
+      ? document.pages[0].text || 'Esta página no contiene texto extraíble.'
+      : document.text;
     $('#confirm-document').hidden = !pending;
     $('#document-dialog').showModal();
   }
@@ -618,8 +722,14 @@ export function createApp({
     if (!state.initialized || state.busy || state.attaching || state.current.document) return;
     state.attaching = true;
     updateControls();
+    showNotice(
+      /\.pdf$/i.test(file.name)
+        ? 'Leyendo las páginas del PDF en este dispositivo…'
+        : 'Leyendo documento…',
+    );
     try {
       const document = await readDocument(file);
+      showNotice();
       pendingDocument = { document, conversation: state.current };
       showDocument(document, true);
     } catch (error) {
@@ -635,6 +745,7 @@ export function createApp({
     if (!pendingDocument || state.busy || pendingDocument.conversation !== state.current) return;
     const { document, conversation } = pendingDocument;
     conversation.document = document;
+    conversation.documentPage = null;
     conversation.useDocument = true;
     conversation.updatedAt = Date.now();
     if (!conversation.messages.length) conversation.title = document.name;
@@ -695,10 +806,22 @@ export function createApp({
     const message = state.current.messages.find((entry) => entry.id === messageId);
     const source = message?.sources?.find((entry) => entry.id === Number(sourceId));
     if (!source) return;
-    $('#source-title').textContent = `Fragmento [${source.id}]`;
+    $('#source-title').textContent =
+      `Fragmento [${source.id}]${source.page ? ` · Página ${source.page}` : ''}`;
     $('#source-detail').textContent =
       `${source.name} · caracteres ${source.start + 1}–${source.end}`;
     $('#source-text').textContent = source.text;
+    const original = state.current.document;
+    const page =
+      original?.id === source.documentId
+        ? original.pages?.find((entry) => entry.page === source.page)
+        : null;
+    $('#source-page-section').hidden = !page;
+    $('#source-page-text').textContent = page?.text || '';
+    $('#source-page-heading').textContent = page
+      ? `Texto completo de la página ${source.page}`
+      : '';
+
     $('#source-dialog').showModal();
   }
 
@@ -715,14 +838,49 @@ export function createApp({
       const file = $('#document-file').files?.[0];
       if (file) void attachDocument(file);
     });
+    $('#model-select').replaceChildren(
+      ...MODELS.map((model) => new window.Option(model.name, model.id)),
+    );
+    $('#model-select').value = state.selectedModel;
+    $('#manage-models').addEventListener('click', () => {
+      $('#models-dialog').showModal();
+      void refreshCache();
+    });
+    $('#model-select').addEventListener('change', () => {
+      if (state.busy || state.loading || state.attaching || state.cacheBusy) return;
+      state.selectedModel = getModel($('#model-select').value).id;
+      try {
+        window.localStorage.setItem('semilla-model', state.selectedModel);
+      } catch {
+        showNotice('La selección de modelo no se conservará al cerrar esta pestaña.');
+      }
+      unloadModel();
+      void refreshCache();
+    });
+    $('#refresh-cache').addEventListener('click', () => void refreshCache());
+    $('#delete-model-cache').addEventListener('click', () => void deleteModelCache());
+    $('#unload-model').addEventListener('click', unloadModel);
+    $('#page-scope').addEventListener('change', () => {
+      if (state.busy || state.attaching) return;
+      state.current.documentPage = Number($('#page-scope').value) || null;
+      void save();
+    });
+    $('#preview-page').addEventListener('change', () => {
+      $('#document-preview').textContent =
+        previewDocument?.pages.find((entry) => entry.page === Number($('#preview-page').value))
+          ?.text || 'Esta página no contiene texto extraíble.';
+    });
     $('#confirm-document').addEventListener('click', () => void acceptDocument());
     $('#document-dialog').addEventListener('close', () => {
       pendingDocument = null;
+      previewDocument = null;
       $('#document-preview').textContent = '';
     });
     $('#source-dialog').addEventListener('close', () => {
       $('#source-text').textContent = '';
       $('#source-detail').textContent = '';
+      $('#source-page-text').textContent = '';
+      $('#source-page-section').open = false;
     });
     $('#view-document').addEventListener('click', () => {
       if (state.current.document) showDocument(state.current.document);
@@ -882,5 +1040,7 @@ export function createApp({
     attachDocument,
     acceptDocument,
     removeDocument,
+    refreshCache,
+    deleteModelCache,
   };
 }

@@ -1,6 +1,6 @@
 # Semilla Digital · Ideas que echan raíz
 
-Asistente en español para escribir, resumir y explicar textos. Ejecuta Llama 3.2 1B con WebLLM en un Web Worker. Las conversaciones se guardan en IndexedDB en el dispositivo.
+Asistente en español para escribir, resumir y explicar textos. Ejecuta Llama 3.2 1B o 3B con WebLLM en un Web Worker. Las conversaciones se guardan en IndexedDB en el dispositivo.
 
 La identidad visual, los colores y los archivos de marca están en [BRAND.md](BRAND.md).
 
@@ -31,7 +31,7 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 
 ## Consultar un documento local
 
-1. Pulsa **＋ Documento** y selecciona un `.txt` o `.md` de hasta 100 KB, codificado en UTF-8.
+1. Pulsa **＋ Documento** y selecciona un `.txt` o `.md` de hasta 100 KB, codificado en UTF-8, o un `.pdf` de hasta 10 MB y 100 páginas.
 2. Revisa la vista previa y pulsa **Usar documento**. Se guarda junto a la conversación, incluso si todavía no hay mensajes.
 3. Con el modelo cargado, haz una pregunta concreta. La búsqueda selecciona hasta tres fragmentos por coincidencia de palabras, sin enviar el archivo a un servidor.
 4. Pulsa una referencia como `[1]` o un botón de **Fragmentos consultados** para ver el texto original. Una referencia que el modelo invente no se convierte en botón.
@@ -39,7 +39,21 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 
 Si no hay coincidencias, la aplicación lo indica sin ejecutar inferencia. La búsqueda no es semántica: puede omitir sinónimos y no utiliza el historial para interpretar preguntas como «¿y eso?». Los resúmenes de documentos grandes son parciales y la interfaz lo advierte. Las referencias identifican material consultado, no certifican que la respuesta sea correcta.
 
-La exportación JSON incluye el documento completo mientras esté adjunto. Markdown incluye los fragmentos consultados en cada respuesta. Ambos archivos pueden contener información privada.
+La exportación JSON incluye el texto extraído y sus páginas mientras el documento esté adjunto. No se conserva ni exporta el PDF binario, sus imágenes o su maquetación. Markdown incluye los fragmentos consultados en cada respuesta. Ambos archivos pueden contener información privada.
+
+## PDF por páginas
+
+La vista previa permite recorrer el texto de cada página. En el documento adjunto, **Consultar** permite elegir todas las páginas o una concreta; la selección se conserva al recargar. Las fuentes muestran su página original y permiten desplegar el texto completo de esa página. Las páginas sin texto conservan su número.
+
+Se limita la extracción a 30 segundos y 512 KB de texto. Los PDF protegidos, dañados o sin texto extraíble muestran un error. Los escaneados necesitan OCR externo; esta versión no incluye OCR, imágenes ni visor de la maquetación original. Tablas y documentos con columnas pueden perder su orden visual. Revisa siempre el texto extraído.
+
+## Administrar modelos y caché
+
+Pulsa el nombre del modelo junto al botón de enviar para abrir **Modelos y caché**. Puedes elegir Llama 3.2 1B (GPU estimada: 1,2 GB) o 3B (3 GB), liberar la memoria de la GPU y borrar las descargas del modelo seleccionado tras confirmar. Cambiar el modelo libera el anterior y requiere pulsar **Cargar modelo**. Se conserva el historial y cada nueva respuesta registra el identificador del modelo usado.
+
+El panel informa de la caché detectada y, si el navegador lo permite, el espacio usado por todo el sitio. Esas cifras incluyen documentos e historial: no son el tamaño de descarga ni la memoria GPU. La caché detectada no garantiza que todos los archivos estén completos; la carga los comprueba. La eliminación se limita a las APIs de caché del modelo de WebLLM.
+
+Referencias técnicas: [PDF.js](https://mozilla.github.io/pdf.js/api/draft/api.js.html) y [caché de WebLLM](https://webllm.mlc.ai/docs/user/advanced_usage.html).
 
 ## Modelo, privacidad y límites
 

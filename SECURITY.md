@@ -2,7 +2,7 @@
 
 ## Alcance de las comprobaciones
 
-La revisión local combina `pnpm security:audit`, pruebas de entradas maliciosas y comprobaciones de las políticas del navegador. Una auditoría sin avisos significa que npm no reporta vulnerabilidades conocidas en el árbol instalado; no certifica que la aplicación esté libre de fallos.
+La revisión local combina `pnpm security:audit`, pruebas de entradas maliciosas y comprobaciones de las políticas del navegador. Una auditoría sin avisos significa que el registro no reporta vulnerabilidades conocidas en el árbol instalado; no certifica que la aplicación esté libre de fallos.
 
 ## Controles aplicados
 
@@ -34,3 +34,9 @@ pnpm format:check
 ```
 
 Revisa las cabeceras del documento y del Worker en el alojamiento real. El resultado de la auditoría depende de los avisos disponibles en ese momento.
+
+## PDF y modelos
+
+PDF.js se carga bajo demanda con un Worker del mismo origen. Los mapas de caracteres y fuentes se sirven localmente. Se desactivan evaluación dinámica, XFA, fuentes DOM y WebAssembly del parser; no se ejecutan acciones, anotaciones ni enlaces del PDF. Solo se guarda texto y se muestra con `textContent`. Se limitan archivo, páginas, texto y duración; esos límites no equivalen a una cuota estricta de memoria del proceso del navegador.
+
+El selector usa una lista cerrada de identificadores. El borrado llama a `deleteModelAllInfoInCache` para un solo modelo y no elimina IndexedDB ni limpia globalmente todas las cachés. Los controles evitan cambiar el modelo durante carga, extracción, generación o mantenimiento de caché.

@@ -1449,3 +1449,53 @@ dialog {
     font-size: 9px;
   }
 }
+
+/* Document pages and model management share the Semilla form language. */
+select {
+  max-width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border, #d9dfd0);
+  border-radius: 10px;
+  background: #fffdf8;
+  color: #203a2c;
+  font: inherit;
+}
+#model-select {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+#page-scope-label,
+#preview-page-label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin: 0.6rem 0;
+}
+#page-scope-label[hidden],
+#preview-page-label[hidden] {
+  display: none;
+}
+#models-dialog .danger-button {
+  margin-top: 1rem;
+}
+#models-dialog p {
+  line-height: 1.6;
+}
+#manage-models {
+  margin-left: auto;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+select:focus-visible {
+  outline: 3px solid #b85532;
+  outline-offset: 3px;
+}
+@media (max-width: 460px) {
+  #manage-models {
+    font-size: 0.68rem;
+  }
+  .composer-toolbar {
+    gap: 0.3rem;
+  }
+}
