@@ -17,9 +17,15 @@ export function createApp({
   checkCompatibility,
   document: doc = document,
   render = renderMarkdown,
+  channel = null,
 }) {
   const $ = (selector) => doc.querySelector(selector);
   const window = doc.defaultView;
+  const syncChannel =
+    channel ||
+    (typeof window.BroadcastChannel === 'function'
+      ? new window.BroadcastChannel('semilla-conversations')
+      : null);
   const state = {
     conversations: [],
     current: null,
@@ -40,6 +46,7 @@ export function createApp({
     state.focusMode = window.localStorage.getItem('semilla-focus-mode') === 'true';
   } catch {}
   let notice = '';
+  let compatibilityFailureNotice = '';
   let saveTimer;
   let pendingDocument = null;
   let previewDocument = null;
@@ -55,6 +62,87 @@ export function createApp({
     $('#notice').textContent = storageWarning + notice;
     $('#notice').dataset.kind = kind;
     $('#notice').hidden = !storageWarning && !notice;
+  }
+
+  function publishSync(message) {
+    try {
+      syncChannel?.postMessage(message);
+    } catch (error) {
+      console.error('No se pudo sincronizar la conversación:', error);
+    }
+  }
+
+  function removeLocalConversation(id) {
+    const current = state.current?.id === id;
+    state.drafts.delete(id);
+    state.conversations = state.conversations.filter((conversation) => conversation.id !== id);
+    if (current && !state.busy) {
+      state.current = newConversation();
+      $('#prompt').value = '';
+      renderConversation();
+    }
+    renderHistory();
+  }
+
+  function applyRemoteConversation(snapshot) {
+    const incoming = recoverConversation(snapshot);
+    const index = state.conversations.findIndex((conversation) => conversation.id === incoming.id);
+    const existing = index < 0 ? null : state.conversations[index];
+    if (existing && existing.updatedAt >= incoming.updatedAt) return false;
+    if (state.busy && state.current?.id === incoming.id) return false;
+    if (index < 0) state.conversations.push(incoming);
+    else state.conversations[index] = incoming;
+    if (state.current?.id === incoming.id) {
+      state.current = incoming;
+      renderConversation();
+    }
+    renderHistory();
+    return true;
+  }
+
+  async function refreshConversation(id) {
+    const latest = await store.get(id);
+    if (latest) applyRemoteConversation(latest);
+    else removeLocalConversation(id);
+    return latest;
+  }
+
+  async function refreshAllConversations() {
+    const currentId = state.current?.id;
+    const conversations = (await store.list()).map(recoverConversation);
+    state.conversations = conversations;
+    const current = conversations.find((conversation) => conversation.id === currentId);
+    if (!state.busy) {
+      if (current) state.current = current;
+      else {
+        state.current = newConversation();
+        $('#prompt').value = '';
+      }
+      renderConversation();
+    }
+    renderHistory();
+  }
+
+  async function receiveSync({ data }) {
+    if (!data?.type || (state.busy && data.id === state.current?.id)) return;
+    try {
+      if (data.type === 'conversation-changed') {
+        const latest = await store.get(data.id);
+        if (latest && applyRemoteConversation(latest))
+          showNotice('Esta conversación se actualizó en otra pestaña.');
+      } else if (data.type === 'conversation-deleted') {
+        const local = state.conversations.find((conversation) => conversation.id === data.id);
+        if (!local || local.updatedAt <= data.updatedAt) {
+          removeLocalConversation(data.id);
+          showNotice('Una conversación se eliminó en otra pestaña.');
+        }
+      } else if (data.type === 'conversations-cleared') {
+        await refreshAllConversations();
+        showNotice('El historial se actualizó en otra pestaña.');
+      }
+    } catch (error) {
+      console.error('No se pudo leer una actualización entre pestañas:', error);
+    }
   }
 
   function updateControls() {
@@ -143,15 +231,30 @@ export function createApp({
     )
       return;
     try {
-      await store.save(conversation);
+      const saved = await store.save(conversation);
+      if (saved === false) {
+        await refreshConversation(conversation.id);
+        showNotice(
+          'Esta conversación cambió en otra pestaña. Se conservó la versión más reciente.',
+          'error',
+        );
+        return false;
+      }
+      publishSync({
+        type: 'conversation-changed',
+        id: conversation.id,
+        updatedAt: conversation.updatedAt,
+      });
       if (state.storageError) {
         state.storageError = false;
         showNotice(notice);
       }
+      return true;
     } catch (error) {
       console.error('No se pudo guardar la conversación:', error);
       state.storageError = true;
       showNotice(notice, 'error');
+      return false;
     }
   }
 
@@ -634,14 +737,30 @@ export function createApp({
 
   async function remove(all = false) {
     if (state.busy || state.attaching || !(await confirmDeletion(all))) return;
+    const removedId = state.current.id;
     try {
       if (all) await store.clear();
-      else await store.delete(state.current.id);
+      else {
+        const deleted = await store.delete(removedId, state.current.updatedAt);
+        if (deleted === false) {
+          await refreshConversation(removedId);
+          showNotice(
+            'Esta conversación cambió en otra pestaña. Se conservó la versión más reciente.',
+            'error',
+          );
+          return;
+        }
+      }
     } catch (error) {
       console.error(error);
       showNotice('No se pudieron borrar los datos del navegador. Vuelve a intentarlo.', 'error');
       return;
     }
+    publishSync(
+      all
+        ? { type: 'conversations-cleared' }
+        : { type: 'conversation-deleted', id: removedId, updatedAt: Date.now() },
+    );
     if (all) {
       state.conversations = [];
       state.drafts.clear();
@@ -805,9 +924,22 @@ export function createApp({
     state.attaching = true;
     updateControls();
     try {
-      await store.save(next);
+      const saved = await store.save(next);
+      if (saved === false) {
+        await refreshConversation(conversation.id);
+        showNotice(
+          'Esta conversación cambió en otra pestaña. Se conservó la versión más reciente.',
+          'error',
+        );
+        return;
+      }
       delete conversation.document;
       Object.assign(conversation, next);
+      publishSync({
+        type: 'conversation-changed',
+        id: conversation.id,
+        updatedAt: conversation.updatedAt,
+      });
       $('#source-dialog').close();
       $('#source-text').textContent = '';
       $('#document-preview').textContent = '';
@@ -851,6 +983,7 @@ export function createApp({
   async function start() {
     setFocusMode(state.focusMode);
     updateControls();
+    syncChannel?.addEventListener('message', receiveSync);
     sidebar(false, false);
     mobile.addEventListener('change', () => sidebar(false, false));
     $('#open-sidebar').addEventListener('click', () => sidebar(true));
@@ -1028,6 +1161,7 @@ export function createApp({
         event.preventDefault();
         event.returnValue = '';
       }
+      syncChannel?.close?.();
     });
     const storageReady = (async () => {
       try {
@@ -1044,16 +1178,29 @@ export function createApp({
       );
     })();
     const compatibilityReady = (async () => {
-      const result = await checkCompatibility();
-      state.supported = result.supported;
-      if (!result.supported) {
-        $('#model-title').textContent = 'La IA local no está disponible';
-        $('#model-description').textContent = result.reason;
-        $('#load-model').textContent = 'No compatible';
+      try {
+        const result = await checkCompatibility();
+        state.supported = result.supported;
+        if (!result.supported) {
+          $('#model-title').textContent = 'La IA local no está disponible';
+          $('#model-description').textContent = result.reason;
+          $('#load-model').textContent = 'No compatible';
+        }
+      } catch (error) {
+        console.error('Compatibilidad:', error);
+        state.supported = false;
+        $('#model-title').textContent = 'No se pudo comprobar la compatibilidad';
+        $('#model-description').textContent =
+          'El historial sigue disponible, pero no podemos cargar la IA local en este momento.';
+        $('#load-model').textContent = 'No disponible';
+        compatibilityFailureNotice =
+          'No se pudo comprobar la compatibilidad con la IA local. Puedes consultar y exportar tu historial.';
+        showNotice(compatibilityFailureNotice, 'error');
       }
       updateControls();
     })();
     await Promise.all([storageReady, compatibilityReady]);
+    if (compatibilityFailureNotice) showNotice(compatibilityFailureNotice, 'error');
     updateControls();
   }
 

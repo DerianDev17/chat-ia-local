@@ -9,7 +9,27 @@ import { ConversationStore } from '../src/storage.js';
 import { renderMarkdown } from '../src/markdown.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-async function setup({ runtime, cache, factory = new IDBFactory(), supported = true } = {}) {
+function channelPair() {
+  const listeners = [new Set(), new Set()];
+  return [0, 1].map((index) => ({
+    addEventListener(type, listener) {
+      if (type === 'message') listeners[index].add(listener);
+    },
+    postMessage(data) {
+      for (const listener of listeners[1 - index]) listener({ data });
+    },
+    close() {},
+  }));
+}
+
+async function setup({
+  runtime,
+  cache,
+  factory = new IDBFactory(),
+  supported = true,
+  checkCompatibility,
+  channel,
+} = {}) {
   const dom = new JSDOM(html, { url: 'http://localhost:5173' });
   const { window } = dom;
   window.matchMedia = () => ({ matches: false, addEventListener() {} });
@@ -41,7 +61,9 @@ async function setup({ runtime, cache, factory = new IDBFactory(), supported = t
     cache,
     store,
     document: window.document,
-    checkCompatibility: async () => ({ supported, reason: 'WebGPU no disponible.' }),
+    checkCompatibility:
+      checkCompatibility || (async () => ({ supported, reason: 'WebGPU no disponible.' })),
+    channel,
     render: (text) => renderMarkdown(text, createDOMPurify(window)),
   });
   await app.start();
@@ -53,6 +75,7 @@ async function setup({ runtime, cache, factory = new IDBFactory(), supported = t
     $: (selector) => window.document.querySelector(selector),
     close() {
       store.close();
+      channel?.close?.();
       window.close();
     },
   };
@@ -148,6 +171,40 @@ test('unsupported browser keeps local history controls available and avoids load
   assert.equal(page.$('#status-text').textContent, 'No compatible');
   assert.equal(await page.app.loadModel(), false);
   page.close();
+});
+
+test('compatibility check failures keep the local history usable', async () => {
+  const page = await setup({
+    checkCompatibility: async () => {
+      throw new Error('Synthetic compatibility failure');
+    },
+  });
+  assert.equal(page.app.state.initialized, true);
+  assert.equal(page.app.state.supported, false);
+  assert.equal(page.$('#new-chat').disabled, false);
+  assert.match(page.$('#notice').textContent, /No se pudo comprobar/);
+  assert.equal(await page.app.loadModel(), false);
+  page.close();
+});
+
+test('syncs saved conversations to another open tab', async () => {
+  const factory = new IDBFactory();
+  const [firstChannel, secondChannel] = channelPair();
+  const runtime = () => ({
+    ready: true,
+    async *generate() {
+      yield { choices: [{ delta: { content: 'Respuesta compartida' } }] };
+    },
+  });
+  const first = await setup({ factory, channel: firstChannel, runtime: runtime() });
+  const second = await setup({ factory, channel: secondChannel, runtime: runtime() });
+  first.$('#prompt').value = 'Pregunta entre pestañas';
+  await first.app.submit();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(second.app.state.conversations.length, 1);
+  assert.equal(second.app.state.conversations[0].messages.at(-1).content, 'Respuesta compartida');
+  first.close();
+  second.close();
 });
 
 test('delete requires confirmation and removes persisted conversation', async () => {

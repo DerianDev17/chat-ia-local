@@ -28,3 +28,36 @@ test('surfaces unavailable storage instead of pretending to save', async () => {
   await assert.rejects(store.open(), /no está disponible/);
   await assert.rejects(store.save(newConversation()), /no disponible/);
 });
+
+test('rejects stale snapshots and prevents them from resurrecting deleted conversations', async () => {
+  const factory = new IDBFactory();
+  const store = await new ConversationStore(factory).open();
+  const current = newConversation();
+  current.updatedAt = 200;
+  current.messages.push(newMessage('user', 'Versión nueva'));
+  assert.equal(await store.save(current), true);
+
+  const stale = structuredClone(current);
+  stale.updatedAt = 100;
+  stale.title = 'Versión antigua';
+  assert.equal(await store.save(stale), false);
+  assert.equal((await store.list())[0].title, 'Nueva conversación');
+  assert.equal(await store.delete(current.id, stale.updatedAt), false);
+
+  assert.equal(await store.delete(current.id, current.updatedAt), true);
+  assert.equal(await store.save(stale), false);
+  assert.deepEqual(await store.list(), []);
+  store.close();
+});
+
+test('a clear tombstone blocks a stale tab from restoring the history', async () => {
+  const factory = new IDBFactory();
+  const store = await new ConversationStore(factory).open();
+  const conversation = newConversation();
+  conversation.updatedAt = 100;
+  await store.save(conversation);
+  assert.equal(await store.clear(), true);
+  assert.equal(await store.save(conversation), false);
+  assert.deepEqual(await store.list(), []);
+  store.close();
+});
