@@ -86,7 +86,20 @@ export function exportMarkdown(conversation) {
             : message.finishReason === 'length'
               ? '\n\n_Límite de longitud alcanzado._'
               : '';
-        return `## ${message.role === 'user' ? 'Tú' : 'Local'}\n\n${message.content}${status}`;
+        const sources = message.sources?.length
+          ? '\n\n### Fragmentos consultados\n\n' +
+            message.sources
+              .map(
+                (source) =>
+                  `Fuente [${source.id}] · ${source.name.replace(/[\r\n]/g, ' ')}\n\n` +
+                  source.text
+                    .split('\n')
+                    .map((line) => `> ${line}`)
+                    .join('\n'),
+              )
+              .join('\n\n')
+          : '';
+        return `## ${message.role === 'user' ? 'Tú' : 'Local'}\n\n${message.content}${status}${sources}`;
       })
       .join('\n\n---\n\n') +
     '\n'
