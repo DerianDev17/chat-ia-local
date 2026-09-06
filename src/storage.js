@@ -193,8 +193,17 @@ export class ConversationStore {
     ).then((result) => result.saved);
   }
 
-  deleteKnowledge(id) {
-    return this.write((store) => store.delete(id), 'knowledge');
+  deleteKnowledge(id, expectedUpdatedAt = null) {
+    return this.write((store) => {
+      const result = { deleted: false };
+      const current = store.get(id);
+      current.onsuccess = () => {
+        if (expectedUpdatedAt !== null && current.result?.updatedAt !== expectedUpdatedAt) return;
+        store.delete(id);
+        result.deleted = true;
+      };
+      return result;
+    }, 'knowledge').then((result) => result.deleted);
   }
   close() {
     this.db?.close();

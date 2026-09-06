@@ -2,6 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory } from 'fake-indexeddb';
 import { ConversationStore } from '../src/storage.js';
+
+test('stale deletion preserves a memory edited in another tab', async () => {
+  const store = await new ConversationStore(new IDBFactory()).open();
+  const original = knowledgeNote({ title: 'Dato', text: 'Usar pnpm' });
+  await store.saveKnowledge(original);
+  const edited = knowledgeNote({ ...original, text: 'Usar npm' }, original);
+  await store.saveKnowledge(edited, original.updatedAt);
+  assert.equal(await store.deleteKnowledge(original.id, original.updatedAt), false);
+  assert.deepEqual(await store.listKnowledge(), [edited]);
+  assert.equal(await store.deleteKnowledge(edited.id, edited.updatedAt), true);
+  assert.deepEqual(await store.listKnowledge(), []);
+  store.close();
+});
 import { newConversation } from '../src/conversations.js';
 import { documentFromPages } from '../src/documents.js';
 import { knowledgeNote, knowledgeDocument, buildKnowledgeContext } from '../src/knowledge.js';

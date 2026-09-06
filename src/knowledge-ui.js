@@ -74,7 +74,13 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
         );
         if (!confirmed || busy) return;
         await run(async () => {
-          await store.deleteKnowledge(entry.id);
+          if (!(await store.deleteKnowledge(entry.id, entry.updatedAt))) {
+            await refresh();
+            status(
+              'Esta entrada cambió en otra pestaña. Revisa la versión actual antes de olvidarla.',
+            );
+            return;
+          }
           if (editing?.id === entry.id) reset();
           await refresh();
           changed();
