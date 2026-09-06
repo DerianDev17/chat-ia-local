@@ -338,7 +338,7 @@ export function createApp({
       button.className = 'history-item';
       button.dataset.id = conversation.id;
       button.setAttribute('aria-current', String(conversation.id === state.current?.id));
-      button.disabled = state.busy;
+      button.disabled = state.busy || state.attaching;
       const title = doc.createElement('strong');
       title.textContent = conversation.title;
       const time = doc.createElement('time');
@@ -1079,6 +1079,8 @@ export function createApp({
     $('#page-scope').addEventListener('change', () => {
       if (state.busy || state.attaching) return;
       state.current.documentPage = Number($('#page-scope').value) || null;
+      state.current.updatedAt = Math.max(Date.now(), state.current.updatedAt + 1);
+      renderHistory();
       void save();
     });
     $('#preview-page').addEventListener('change', () => {
@@ -1105,6 +1107,8 @@ export function createApp({
     $('#use-document').addEventListener('change', () => {
       if (state.busy) return;
       state.current.useDocument = $('#use-document').checked;
+      state.current.updatedAt = Math.max(Date.now(), state.current.updatedAt + 1);
+      renderHistory();
       void save();
     });
     $('#new-chat').addEventListener('click', () => selectConversation(newConversation()));
@@ -1140,6 +1144,7 @@ export function createApp({
     doc.querySelectorAll('[data-prompt]').forEach((button) =>
       button.addEventListener('click', () => {
         $('#prompt').value = button.dataset.prompt;
+        rememberDraft(state.current);
         resizePrompt();
         $('#prompt').focus();
       }),

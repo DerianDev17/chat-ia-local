@@ -9,6 +9,62 @@ import { ConversationStore } from '../src/storage.js';
 import { renderMarkdown } from '../src/markdown.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+
+test('suggestions enter the draft immediately and survive switching conversations', async () => {
+  const page = await setup();
+  const original = page.app.state.current;
+  page.$('[data-prompt]').click();
+  const text = page.$('#prompt').value;
+  assert.equal(page.app.state.drafts.get(original.id), text);
+  page.$('#new-chat').click();
+  page.app.selectConversation(original);
+  assert.equal(page.$('#prompt').value, text);
+  page.close();
+});
+
+test('document preferences advance the version and synchronize between tabs', async () => {
+  const factory = new IDBFactory();
+  const [firstChannel, secondChannel] = channelPair();
+  const first = await setup({ factory, channel: firstChannel });
+  const { documentFromPages } = await import('../src/documents.js');
+  const conversation = first.app.state.current;
+  conversation.document = documentFromPages({ name: 'demo.pdf', size: 100 }, [
+    { page: 1, text: 'Primera página' },
+    { page: 2, text: 'Segunda página' },
+  ]);
+  first.app.state.conversations.push(conversation);
+  first.app.selectConversation(conversation);
+  await first.app.save();
+  const second = await setup({ factory, channel: secondChannel });
+  for (const [selector, property, value] of [
+    ['#page-scope', 'documentPage', 2],
+    ['#use-document', 'useDocument', false],
+  ]) {
+    const previous = conversation.updatedAt;
+    const updated = new Promise((resolve) => {
+      const get = second.store.get.bind(second.store);
+      second.store.get = async (id) => {
+        const result = await get(id);
+        second.store.get = get;
+        resolve();
+        return result;
+      };
+    });
+    if (selector === '#page-scope') first.$(selector).value = String(value);
+    else first.$(selector).checked = value;
+    first.$(selector).dispatchEvent(new first.window.Event('change'));
+    await updated;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(conversation.updatedAt > previous);
+    assert.equal(second.app.state.current[property], value);
+    assert.equal((await first.store.get(conversation.id))[property], value);
+  }
+  first.app.state.attaching = true;
+  first.$('#search').dispatchEvent(new first.window.Event('input'));
+  assert.equal(first.$('.history-item').disabled, true);
+  first.close();
+  second.close();
+});
 function channelPair() {
   const listeners = [new Set(), new Set()];
   return [0, 1].map((index) => ({
