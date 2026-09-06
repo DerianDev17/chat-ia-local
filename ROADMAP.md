@@ -1,5 +1,7 @@
 # Próximas funcionalidades
 
+Entregado: biblioteca local de documentos y notas por proyecto, recuerdos explícitos desde mensajes, edición y borrado, consulta entre chats con referencias y migración del historial. Próximas ampliaciones: embeddings multilingües, propuestas de recuerdos revisables y copias completas de la biblioteca.
+
 Ya están implementadas la consulta de texto y PDF por páginas y la administración de modelos/caché. Las siguientes propuestas pendientes son importar copias y editar preguntas.
 
 ## 1. Importar copias de seguridad — esfuerzo bajo/medio

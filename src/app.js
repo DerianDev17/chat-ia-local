@@ -10,6 +10,8 @@ import {
 } from './conversations.js';
 import { renderMarkdown } from './markdown.js';
 import { readDocument, buildDocumentContext, citedSources } from './documents.js';
+import { buildKnowledgeContext, projectName } from './knowledge.js';
+import { createKnowledgeUI } from './knowledge-ui.js';
 
 export function createApp({
   runtime,
@@ -57,6 +59,17 @@ export function createApp({
   let draftTimer;
   let pendingDocument = null;
   let previewDocument = null;
+  const knowledgeUI = createKnowledgeUI({
+    document: doc,
+    store,
+    current: () => state.current,
+    locked: () => !state.initialized || state.busy || state.attaching,
+    setLocked: (locked) => {
+      state.attaching = locked;
+      updateControls();
+    },
+    changed: () => publishSync({ type: 'knowledge-changed' }),
+  });
   const announce = (text) => {
     $('#announcement').textContent = text;
   };
@@ -182,7 +195,9 @@ export function createApp({
   async function receiveSync({ data }) {
     if (!data?.type || (state.busy && data.id === state.current?.id)) return;
     try {
-      if (data.type === 'conversation-changed') {
+      if (data.type === 'knowledge-changed') {
+        if ($('#knowledge-dialog').open) await knowledgeUI.refresh();
+      } else if (data.type === 'conversation-changed') {
         const latest = await store.get(data.id);
         if (latest && applyRemoteConversation(latest))
           showNotice('Esta conversación se actualizó en otra pestaña.');
@@ -202,6 +217,12 @@ export function createApp({
   }
 
   function updateControls() {
+    $('#open-knowledge').disabled = !state.initialized || state.busy || state.attaching;
+    $('#chat-project').disabled = !state.initialized || state.busy || state.attaching;
+    $('#use-knowledge').disabled = !state.initialized || state.busy || state.attaching;
+    doc.querySelectorAll('[data-remember]').forEach((button) => {
+      button.disabled = state.busy || state.attaching;
+    });
     const locked = state.busy || state.loading || state.attaching || state.cacheBusy;
     $('#manage-models').disabled = locked;
     $('#model-select').disabled = locked;
@@ -429,6 +450,13 @@ export function createApp({
     content.className = 'message-content';
     fillContent(content, message);
     item.append(header, content);
+    if (message.content && message.status === 'complete') {
+      const remember = doc.createElement('button');
+      remember.className = 'text-button';
+      remember.textContent = 'Recordar esto';
+      remember.dataset.remember = message.id;
+      item.append(remember);
+    }
     if (message.sources?.length && message.status !== 'generating') {
       const references = doc.createElement('div');
       references.className = 'source-list';
@@ -484,6 +512,8 @@ export function createApp({
   }
 
   function renderConversation() {
+    $('#chat-project').value = projectName(state.current?.project);
+    $('#use-knowledge').checked = state.current?.useKnowledge === true;
     $('#chat-title').textContent = state.current?.title || 'Nueva conversación';
     const messages = state.current?.messages || [];
     $('#welcome').hidden = messages.length > 0;
@@ -633,10 +663,21 @@ export function createApp({
     }
   }
 
-  function prepareContext(question) {
-    return state.current.document && state.current.useDocument !== false
-      ? buildDocumentContext(question, state.current.document, state.current.documentPage || null)
-      : null;
+  async function prepareContext(question, history = state.current.messages) {
+    const conversation = state.current;
+    if (conversation.document && conversation.useDocument !== false)
+      return buildDocumentContext(
+        question,
+        conversation.document,
+        conversation.documentPage || null,
+      );
+    if (!conversation.useKnowledge) return null;
+    return buildKnowledgeContext(
+      question,
+      await store.listKnowledge(),
+      conversation.project,
+      history,
+    );
   }
 
   async function generate(reply, documentContext = null) {
@@ -646,7 +687,9 @@ export function createApp({
     state.stopping = false;
     showNotice(
       documentContext
-        ? `Consulta del documento: ${context.sources.length} de ${conversation.document.chunks.length} fragmentos. ${context.summary && context.partial ? 'El resumen será parcial. ' : ''}La selección usa palabras de esta pregunta; las referencias no garantizan exactitud.`
+        ? context.kind === 'knowledge'
+          ? `Biblioteca y memoria de ${projectName(conversation.project)}: ${context.sources.length} fragmentos consultados. La búsqueda usa palabras; las referencias no garantizan exactitud.${context.summary && context.partial ? ' El resumen es parcial.' : ''}`
+          : `Consulta del documento: ${context.sources.length} de ${conversation.document.chunks.length} fragmentos. ${context.summary && context.partial ? 'El resumen será parcial. ' : ''}La selección usa palabras de esta pregunta; las referencias no garantizan exactitud.`
         : context.trimmed
           ? 'Para mantener la conversación ágil, el modelo usa los intercambios recientes que caben en su contexto. El historial completo sigue guardado.'
           : '',
@@ -670,7 +713,9 @@ export function createApp({
     try {
       if (documentContext && !context.sources.length) {
         reply.content =
-          'No encontré fragmentos relacionados con esta pregunta. Prueba con palabras del documento o desactiva «Responder con este documento» para usar el chat general.';
+          context.kind === 'knowledge'
+            ? 'No encontré información relacionada en la biblioteca de este proyecto. Prueba con palabras del contenido guardado o desactiva «Usar biblioteca y memoria» para usar el chat general.'
+            : 'No encontré fragmentos relacionados con esta pregunta. Prueba con palabras del documento o desactiva «Responder con este documento» para usar el chat general.';
         reply.status = 'complete';
         announce('No se encontraron fragmentos relacionados.');
         return;
@@ -744,11 +789,17 @@ export function createApp({
     const conversation = state.current;
     let documentContext;
     try {
-      documentContext = prepareContext(text);
+      state.attaching = true;
+      updateControls();
+      documentContext = await prepareContext(text);
     } catch (error) {
       showNotice(error.message, 'error');
       return;
+    } finally {
+      state.attaching = false;
+      updateControls();
     }
+    if (state.current !== conversation) return;
     if (!conversation.messages.length) {
       conversation.title = text.replace(/\s+/g, ' ').slice(0, 65);
       if (!state.conversations.includes(conversation)) state.conversations.push(conversation);
@@ -773,11 +824,20 @@ export function createApp({
     if (state.current !== conversation) return;
     let documentContext;
     try {
-      documentContext = prepareContext(conversation.messages.at(-2).content);
+      state.attaching = true;
+      updateControls();
+      documentContext = await prepareContext(
+        conversation.messages.at(-2).content,
+        conversation.messages.slice(0, -2),
+      );
     } catch (error) {
       showNotice(error.message, 'error');
       return;
+    } finally {
+      state.attaching = false;
+      updateControls();
     }
+    if (state.current !== conversation) return;
     await generate(reply, documentContext);
   }
 
@@ -787,7 +847,7 @@ export function createApp({
       ? '¿Borrar todas las conversaciones?'
       : '¿Eliminar conversación?';
     $('#confirm-description').textContent =
-      'Se eliminarán también los documentos y fragmentos guardados en la conversación. Puedes exportar una copia antes de eliminarla.';
+      'Se eliminarán también los documentos, fragmentos y recuerdos derivados de estos chats. Las notas y documentos independientes de la biblioteca se conservan. Puedes exportar una copia antes de eliminarla.';
     dialog.returnValue = '';
     dialog.showModal();
     dialog.querySelector('[value="cancel"]').focus();
@@ -1059,7 +1119,7 @@ export function createApp({
     $('#source-title').textContent =
       `Fragmento [${source.id}]${source.page ? ` · Página ${source.page}` : ''}`;
     $('#source-detail').textContent =
-      `${source.name} · caracteres ${source.start + 1}–${source.end}`;
+      `${source.name} · caracteres ${source.start + 1}–${source.end}${source.origin ? ` · Recuerdo de: ${source.origin.title || 'Conversación'} (${source.origin.role === 'assistant' ? 'asistente' : 'usuario'})` : ''}`;
     $('#source-text').textContent = source.text;
     const original = state.current.document;
     const page =
@@ -1076,6 +1136,18 @@ export function createApp({
   }
 
   async function start() {
+    $('#open-knowledge').addEventListener('click', () => void knowledgeUI.open());
+    const saveKnowledgePreferences = () => {
+      if (!state.initialized || state.busy || state.attaching) return;
+      state.current.project = projectName($('#chat-project').value);
+      state.current.useKnowledge = $('#use-knowledge').checked;
+      state.current.updatedAt = Math.max(Date.now(), state.current.updatedAt + 1);
+      if (!state.conversations.includes(state.current)) state.conversations.push(state.current);
+      renderHistory();
+      void save();
+    };
+    $('#chat-project').addEventListener('change', saveKnowledgePreferences);
+    $('#use-knowledge').addEventListener('change', saveKnowledgePreferences);
     setFocusMode(state.focusMode);
     updateControls();
     syncChannel?.addEventListener('message', receiveSync);
@@ -1187,6 +1259,13 @@ export function createApp({
       }),
     );
     $('#messages').addEventListener('click', (event) => {
+      const remember = event.target.closest('[data-remember]');
+      if (remember && !state.busy && !state.attaching) {
+        const message = state.current.messages.find(
+          (entry) => entry.id === remember.dataset.remember,
+        );
+        if (message?.status === 'complete') void knowledgeUI.open(message);
+      }
       const copy = event.target.closest('[data-copy]');
       const retryButton = event.target.closest('[data-retry]');
       if (copy) void copyMessage(copy.dataset.copy, copy);

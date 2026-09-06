@@ -10,6 +10,113 @@ import { renderMarkdown } from '../src/markdown.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
+async function settleKnowledge(page) {
+  for (let i = 0; i < 200 && page.app.state.attaching; i++)
+    await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.app.state.attaching, false, 'knowledge operation completed');
+}
+
+test('remembers a reviewed chat message and retrieves it with citations in a new chat', async () => {
+  const calls = [];
+  const page = await setup({
+    runtime: {
+      ready: true,
+      async *generate(messages) {
+        calls.push(structuredClone(messages));
+        yield { choices: [{ delta: { content: 'Utiliza pnpm [1].' } }] };
+      },
+    },
+  });
+  page.$('#prompt').value = 'Este proyecto utiliza pnpm';
+  await page.app.submit();
+  const originalId = page.app.state.current.id;
+  page.$('[data-remember]').click();
+  await settleKnowledge(page);
+  assert.equal((await page.store.listKnowledge()).length, 0);
+  page.$('#knowledge-title').value = 'Herramientas';
+  page.$('#knowledge-project').value = 'Web';
+  page.$('#knowledge-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  await settleKnowledge(page);
+  const memory = (await page.store.listKnowledge())[0];
+  assert.equal(memory.origin.conversationId, originalId);
+  page.$('#knowledge-dialog').close();
+  page.$('#new-chat').click();
+  page.$('#chat-project').value = 'Web';
+  page.$('#use-knowledge').checked = true;
+  page.$('#use-knowledge').dispatchEvent(new page.window.Event('change'));
+  page.$('#prompt').value = '¿Qué utiliza el proyecto, pnpm?';
+  await page.app.submit();
+  assert.match(JSON.stringify(calls.at(-1)), /Este proyecto utiliza pnpm/);
+  assert.equal(page.app.state.current.messages.at(-1).sources[0].knowledgeId, memory.id);
+  page.$('[data-source]').click();
+  assert.match(page.$('#source-detail').textContent, /Recuerdo de:/);
+  page.$('#source-dialog').close();
+  await page.store.deleteKnowledge(memory.id);
+  const count = calls.length;
+  await page.app.retry(page.app.state.current.messages.at(-1).id);
+  assert.equal(calls.length, count);
+  assert.match(page.app.state.current.messages.at(-1).content, /No encontré información/);
+  assert.equal(page.app.state.current.messages.at(-1).sources.length, 0);
+  page.close();
+});
+
+test('library previews files, preserves failed edits and confirms forgetting', async () => {
+  const page = await setup({ supported: false });
+  page.$('#open-knowledge').click();
+  await settleKnowledge(page);
+  const file = {
+    name: 'notas.txt',
+    size: 20,
+    async arrayBuffer() {
+      return new TextEncoder().encode('pnpm para el proyecto').buffer;
+    },
+  };
+  Object.defineProperty(page.$('#knowledge-file'), 'files', { configurable: true, value: [file] });
+  page.$('#knowledge-file').dispatchEvent(new page.window.Event('change'));
+  await settleKnowledge(page);
+  assert.equal((await page.store.listKnowledge()).length, 0);
+  assert.equal(page.$('#knowledge-text').readOnly, true);
+  page.$('#knowledge-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  await settleKnowledge(page);
+  assert.equal((await page.store.listKnowledge())[0].kind, 'document');
+  page.$('#knowledge-list [aria-label^="Olvidar"]').click();
+  page.$('#forget-dialog').close('cancel');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await page.store.listKnowledge()).length, 1);
+  page.$('#knowledge-list [aria-label^="Olvidar"]').click();
+  page.$('#forget-dialog').close('confirm');
+  await new Promise((resolve) => setImmediate(resolve));
+  await settleKnowledge(page);
+  assert.equal((await page.store.listKnowledge()).length, 0);
+  page.$('#knowledge-title').value = 'Nota';
+  page.$('#knowledge-text').value = 'Contenido pendiente';
+  page.store.saveKnowledge = async () => {
+    throw new Error('Sin espacio');
+  };
+  page.$('#knowledge-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  await settleKnowledge(page);
+  assert.equal(page.$('#knowledge-text').value, 'Contenido pendiente');
+  assert.match(page.$('#knowledge-status').textContent, /Sin espacio/);
+  assert.equal(page.$('#knowledge-form').inert, false);
+  page.close();
+});
+
+test('knowledge read failures preserve the draft and release controls without generating', async () => {
+  const page = await setup();
+  await page.app.loadModel();
+  page.app.state.current.useKnowledge = true;
+  page.store.listKnowledge = async () => {
+    throw new Error('Lectura no disponible');
+  };
+  page.$('#prompt').value = 'Mi pregunta';
+  await page.app.submit();
+  assert.equal(page.$('#prompt').value, 'Mi pregunta');
+  assert.equal(page.app.state.current.messages.length, 0);
+  assert.equal(page.app.state.attaching, false);
+  assert.match(page.$('#notice').textContent, /Lectura no disponible/);
+  page.close();
+});
+
 test('suggestions enter the draft immediately and survive switching conversations', async () => {
   const page = await setup();
   const original = page.app.state.current;

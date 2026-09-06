@@ -42,6 +42,7 @@
             aria-label="Buscar conversación"
         /></label>
         <div class="section-label">TU ESPACIO DE IDEAS</div>
+        <button id="open-knowledge" class="new-chat" disabled>Biblioteca y memoria</button>
         <nav id="history" class="history" aria-label="Historial">
           <p class="history-empty">Cada conversación, un nuevo comienzo.</p>
         </nav>
@@ -216,6 +217,13 @@
             ><span>La IA puede equivocarse. Revisa la información importante.</span
             ><span class="keyboard-hint">Enter para enviar · Shift + Enter para nueva línea</span>
           </div>
+          <div class="knowledge-controls">
+            <label
+              >Proyecto
+              <input id="chat-project" maxlength="80" value="General" list="knowledge-projects"
+            /></label>
+            <label><input id="use-knowledge" type="checkbox" /> Usar biblioteca y memoria</label>
+          </div>
         </div>
       </section>
     </div>
@@ -242,6 +250,45 @@
         La caché permite reutilizar descargas. El navegador puede eliminarla si necesita espacio.
         Borrarla conserva tus conversaciones y documentos.
       </p>
+    </dialog>
+    <dialog id="knowledge-dialog" aria-labelledby="knowledge-heading">
+      <div class="dialog-heading">
+        <h2 id="knowledge-heading">Biblioteca y memoria</h2>
+        <button class="icon-button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p>
+        Guarda documentos, notas y recuerdos para otros chats del mismo proyecto. Todo permanece en
+        este navegador. Los recuerdos se guardan cuando tú lo decides; el modelo no se reentrena.
+      </p>
+      <form id="knowledge-form">
+        <label
+          >Proyecto
+          <input id="knowledge-project" maxlength="80" value="General" list="knowledge-projects"
+        /></label>
+        <div class="button-row">
+          <button id="new-knowledge" type="button" class="secondary-button">Nueva nota</button>
+          <label
+            >Importar documento <input id="knowledge-file" type="file" accept=".txt,.md,.pdf"
+          /></label>
+        </div>
+        <p>Texto hasta 100 KB; PDF hasta 10 MB y 100 páginas. Máximo 100 entradas.</p>
+        <label>Título <input id="knowledge-title" maxlength="120" required /></label>
+        <label>Contenido <textarea id="knowledge-text" rows="6" required></textarea></label>
+        <p id="knowledge-origin"></p>
+        <button id="save-knowledge" class="primary-button">Guardar nota</button>
+      </form>
+      <p id="knowledge-status" role="status" aria-live="polite"></p>
+      <h3>Contenido del proyecto</h3>
+      <ul id="knowledge-list"></ul>
+    </dialog>
+    <datalist id="knowledge-projects"></datalist>
+    <dialog id="forget-dialog" aria-labelledby="forget-heading">
+      <h2 id="forget-heading">¿Olvidar este contenido?</h2>
+      <p id="forget-description"></p>
+      <form method="dialog" class="button-row">
+        <button class="secondary-button" value="cancel">Cancelar</button>
+        <button class="danger-button" value="confirm">Olvidar</button>
+      </form>
     </dialog>
     <dialog id="manage-dialog" aria-labelledby="manage-title">
       <form id="rename-form">
@@ -315,6 +362,11 @@
         propio.
       </p>
       <p>No se garantiza el funcionamiento sin conexión de toda la aplicación.</p>
+      <p>
+        Borrar conversaciones elimina también sus recuerdos derivados. Las notas y documentos de la
+        biblioteca se eliminan con «Olvidar» en Biblioteca y memoria. Las respuestas existentes
+        pueden conservar citas.
+      </p>
       <button id="clear-data" class="danger-button">Borrar todas las conversaciones</button>
     </dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title">

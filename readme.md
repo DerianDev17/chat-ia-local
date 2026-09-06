@@ -41,6 +41,19 @@ Si no hay coincidencias, la aplicación lo indica sin ejecutar inferencia. La b�
 
 La exportación JSON incluye el texto extraído y sus páginas mientras el documento esté adjunto. No se conserva ni exporta el PDF binario, sus imágenes o su maquetación. Markdown incluye los fragmentos consultados en cada respuesta. Ambos archivos pueden contener información privada.
 
+## Biblioteca y memoria entre chats
+
+1. Abre **Biblioteca y memoria** en el menú lateral. Escribe un proyecto (por defecto **General**) y añade una nota o importa un archivo `.txt`, `.md` o `.pdf`. Revisa el texto antes de guardarlo.
+2. En un chat, pulsa **Recordar esto** bajo un mensaje. Revisa o corrige su contenido, elige el proyecto y pulsa **Guardar recuerdo**. Las respuestas del asistente no se guardan automáticamente como hechos.
+3. En otra conversación, selecciona el mismo **Proyecto** y activa **Usar biblioteca y memoria**. La búsqueda selecciona hasta tres fragmentos relevantes por palabras y muestra referencias con su título y página, o el chat de origen del recuerdo. Los turnos recientes completos se incluyen cuando caben en el contexto.
+4. Usa **Ver / editar** para corregir notas o recuerdos, y **Olvidar** para eliminarlos tras confirmar. Los documentos permiten revisar el texto y cambiar su título o proyecto. Para reemplazar su contenido, elimina la entrada e importa la nueva versión.
+
+Los proyectos se identifican por nombre, ignorando mayúsculas y espacios de los extremos. No se consulta la biblioteca de otros proyectos. Un documento adjunto con **Responder con este documento** activo tiene prioridad sobre la biblioteca. Si no hay coincidencias, la app lo indica sin ejecutar el modelo; puedes reformular o desactivar la consulta.
+
+Se conservan los límites de archivos existentes y se admiten hasta 100 entradas en la biblioteca. Los datos permanecen en IndexedDB, con migración del historial anterior. Borrar un chat elimina sus recuerdos derivados; borrar todo el historial conserva las notas y documentos independientes. Las respuestas y exportaciones anteriores pueden conservar citas del contenido eliminado. Las exportaciones de conversación incluyen los fragmentos consultados, no una copia completa de la biblioteca.
+
+Esta versión recuerda información explícita y busca por palabras: no reentrena el modelo ni genera recuerdos automáticamente, y no incluye embeddings. Borrar los datos del navegador elimina también la biblioteca.
+
 ## Duplicar una conversación
 
 Abre **Opciones de conversación (•••)** y pulsa **Duplicar conversación** para continuar en una copia independiente. Conserva los mensajes, el modelo registrado, el documento, la página seleccionada y las referencias. La original permanece en el historial; cada copia puede renombrarse, exportarse y eliminarse por separado. El borrador sin enviar permanece en la original.
