@@ -12,14 +12,18 @@ export class ConversationStore {
   async open() {
     if (!this.factory) throw new Error('El almacenamiento local no está disponible.');
     this.db = await new Promise((resolve, reject) => {
-      const request = this.factory.open(this.name, 1);
+      const request = this.factory.open(this.name, 2);
       let failed = false;
       const fail = (error) => {
         failed = true;
         reject(error);
       };
-      request.onupgradeneeded = () =>
-        request.result.createObjectStore('conversations', { keyPath: 'id' });
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('conversations'))
+          request.result.createObjectStore('conversations', { keyPath: 'id' });
+        if (!request.result.objectStoreNames.contains('knowledge'))
+          request.result.createObjectStore('knowledge', { keyPath: 'id' });
+      };
       request.onerror = () => fail(request.error);
       request.onblocked = () =>
         fail(new Error('Cierra otras pestañas de Semilla Digital y vuelve a abrir esta página.'));
@@ -35,14 +39,14 @@ export class ConversationStore {
     return this;
   }
 
-  transaction(mode, action) {
+  transaction(mode, action, name = 'conversations') {
     return new Promise((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Almacenamiento no disponible.'));
         return;
       }
-      const tx = this.db.transaction('conversations', mode);
-      const result = action(tx.objectStore('conversations'));
+      const tx = this.db.transaction(name, mode);
+      const result = action(tx.objectStore(Array.isArray(name) ? name[0] : name), tx);
       tx.oncomplete = () => resolve(result?.result ?? result);
       tx.onabort = () =>
         reject(tx.error || result?.error || new Error('No se pudieron guardar los datos.'));
@@ -62,8 +66,8 @@ export class ConversationStore {
     return isTombstone(record) ? undefined : record;
   }
 
-  write(action) {
-    const operation = this.queue.then(() => this.transaction('readwrite', action));
+  write(action, name = 'conversations') {
+    const operation = this.queue.then(() => this.transaction('readwrite', action, name));
     this.queue = operation.catch(() => {});
     return operation;
   }
@@ -97,42 +101,100 @@ export class ConversationStore {
   }
 
   delete(id, expectedUpdatedAt = Number.POSITIVE_INFINITY) {
-    return this.write((store) => {
-      const current = store.get(id);
-      const result = { deleted: false };
-      current.onsuccess = () => {
-        if (
-          current.result &&
-          !isTombstone(current.result) &&
-          current.result.updatedAt > expectedUpdatedAt
-        )
-          return;
-        store.put({
-          id,
-          __tombstone: 'conversation',
-          updatedAt: Date.now(),
-        });
-        result.deleted = true;
-      };
-      return result;
-    }).then((result) => result.deleted);
+    return this.write(
+      (store, tx) => {
+        const current = store.get(id);
+        const result = { deleted: false };
+        current.onsuccess = () => {
+          if (
+            current.result &&
+            !isTombstone(current.result) &&
+            current.result.updatedAt > expectedUpdatedAt
+          )
+            return;
+          store.put({
+            id,
+            __tombstone: 'conversation',
+            updatedAt: Date.now(),
+          });
+          const knowledge = tx.objectStore('knowledge');
+          const entries = knowledge.getAll();
+          entries.onsuccess = () => {
+            for (const entry of entries.result)
+              if (entry.origin?.conversationId === id) knowledge.delete(entry.id);
+          };
+          result.deleted = true;
+        };
+        return result;
+      },
+      ['conversations', 'knowledge'],
+    ).then((result) => result.deleted);
   }
 
   clear() {
-    return this.write((store) => {
-      const records = store.getAll();
-      const result = { cleared: false };
-      records.onsuccess = () => {
-        for (const record of records.result) store.delete(record.id);
-        store.put({
-          id: CLEAR_TOMBSTONE_ID,
-          __tombstone: 'clear',
-          updatedAt: Date.now(),
-        });
-        result.cleared = true;
-      };
-      return result;
-    }).then((result) => result.cleared);
+    return this.write(
+      (store, tx) => {
+        const records = store.getAll();
+        const result = { cleared: false };
+        records.onsuccess = () => {
+          for (const record of records.result) store.delete(record.id);
+          store.put({
+            id: CLEAR_TOMBSTONE_ID,
+            __tombstone: 'clear',
+            updatedAt: Date.now(),
+          });
+          result.cleared = true;
+          const knowledge = tx.objectStore('knowledge');
+          const entries = knowledge.getAll();
+          entries.onsuccess = () => {
+            for (const entry of entries.result)
+              if (entry.origin?.conversationId) knowledge.delete(entry.id);
+          };
+        };
+        return result;
+      },
+      ['conversations', 'knowledge'],
+    ).then((result) => result.cleared);
+  }
+
+  async listKnowledge() {
+    await this.queue;
+    return this.transaction('readonly', (store) => store.getAll(), 'knowledge');
+  }
+
+  saveKnowledge(entry, expectedUpdatedAt = null) {
+    const snapshot = structuredClone(entry);
+    return this.write(
+      (store, tx) => {
+        const result = { saved: false };
+        const current = store.get(snapshot.id);
+        current.onsuccess = () => {
+          if (expectedUpdatedAt !== null && current.result?.updatedAt !== expectedUpdatedAt) return;
+          const put = () => {
+            const count = store.count();
+            count.onsuccess = () => {
+              if (!current.result && count.result >= 100) return;
+              store.put(snapshot);
+              result.saved = true;
+            };
+          };
+          if (snapshot.origin?.conversationId) {
+            const conversation = tx
+              .objectStore('conversations')
+              .get(snapshot.origin.conversationId);
+            conversation.onsuccess = () => {
+              if (conversation.result && !isTombstone(conversation.result)) put();
+            };
+          } else put();
+        };
+        return result;
+      },
+      ['knowledge', 'conversations'],
+    ).then((result) => result.saved);
+  }
+
+  deleteKnowledge(id) {
+    return this.write((store) => store.delete(id), 'knowledge');
   }
   close() {
     this.db?.close();
