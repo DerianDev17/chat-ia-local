@@ -78,6 +78,73 @@ function channelPair() {
   }));
 }
 
+test('duplicates from options without loading AI and preserves the original across reload', async () => {
+  const factory = new IDBFactory();
+  const page = await setup({ factory, supported: false });
+  await page.app.attachDocument({
+    name: 'notas.txt',
+    size: 10,
+    async arrayBuffer() {
+      return new TextEncoder().encode('Mis notas.').buffer;
+    },
+  });
+  await page.app.acceptDocument();
+  const original = structuredClone(page.app.state.current);
+  page.$('#prompt').value = 'Borrador original';
+  page.$('#conversation-options').click();
+  page.$('#duplicate-chat').click();
+  await page.store.queue;
+  await new Promise((resolve) => setImmediate(resolve));
+  const copy = page.app.state.current;
+  assert.notEqual(copy.id, original.id);
+  assert.equal(copy.title, 'notas.txt (copia)');
+  assert.equal(page.$('#prompt').value, '');
+  assert.equal(page.$('#manage-dialog').open, false);
+  assert.equal(page.runtime.ready, false);
+  assert.deepEqual(await page.store.get(original.id), original);
+  assert.equal((await page.store.list()).length, 2);
+  page.app.selectConversation(page.app.state.conversations.find((c) => c.id === original.id));
+  assert.equal(page.$('#prompt').value, 'Borrador original');
+  page.close();
+  const reopened = await setup({ factory, supported: false });
+  const savedCopy = await reopened.store.get(copy.id);
+  assert.equal(savedCopy.document.text, original.document.text);
+  assert.notEqual(savedCopy.document.id, original.document.id);
+  await reopened.store.delete(copy.id);
+  assert.deepEqual(await reopened.store.get(original.id), original);
+  reopened.close();
+});
+
+test('failed duplication preserves history and can be retried; concurrent copies are blocked', async () => {
+  const page = await setup();
+  await page.app.loadModel();
+  page.$('#prompt').value = 'Una pregunta';
+  await page.app.submit();
+  const original = page.app.state.current;
+  const save = page.store.save.bind(page.store);
+  for (const rejected of [true, false]) {
+    page.store.save = async () => {
+      if (rejected) throw new Error('Synthetic quota failure');
+      return false;
+    };
+    await page.app.duplicate();
+    assert.equal(page.app.state.current, original);
+    assert.equal(page.app.state.conversations.length, 1);
+    assert.equal(page.app.state.attaching, false);
+    assert.match(page.$('#notice').textContent, /No se pudo guardar la copia/);
+  }
+  page.store.save = save;
+  const pending = page.app.duplicate();
+  assert.equal(page.$('#duplicate-chat').disabled, true);
+  assert.equal(await page.app.duplicate(), undefined);
+  await pending;
+  assert.equal((await page.store.list()).length, 2);
+  page.app.state.busy = true;
+  assert.equal(await page.app.duplicate(), undefined);
+  page.app.state.busy = false;
+  page.close();
+});
+
 async function setup({
   runtime,
   cache,

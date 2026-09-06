@@ -22,6 +22,25 @@ export function newMessage(role, content = '', status = 'complete') {
   return { id: crypto.randomUUID(), role, content, status, createdAt: Date.now() };
 }
 
+export function duplicateConversation(conversation) {
+  const copy = recoverConversation(structuredClone(conversation));
+  const now = Date.now();
+  copy.id = crypto.randomUUID();
+  copy.title = `${conversation.title.slice(0, 110)} (copia)`;
+  copy.createdAt = now;
+  copy.updatedAt = now;
+  const originalDocumentId = copy.document?.id;
+  if (copy.document) copy.document.id = crypto.randomUUID();
+  for (const message of copy.messages) {
+    message.id = crypto.randomUUID();
+    for (const source of message.sources || []) {
+      if (originalDocumentId && source.documentId === originalDocumentId)
+        source.documentId = copy.document.id;
+    }
+  }
+  return copy;
+}
+
 export function validatePrompt(text) {
   if (!text.trim()) return 'Escribe un mensaje antes de enviarlo.';
   if (bytes(text) + 32 > INPUT_BUDGET)

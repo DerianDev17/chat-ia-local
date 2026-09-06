@@ -1,6 +1,7 @@
 import { MODELS, getModel, modelCache } from './models.js';
 import {
   buildContext,
+  duplicateConversation,
   exportMarkdown,
   newConversation,
   newMessage,
@@ -226,6 +227,11 @@ export function createApp({
       state.busy ||
       state.attaching;
     $('#clear-data').disabled = state.busy || state.attaching || !state.initialized;
+    $('#duplicate-chat').disabled =
+      !state.initialized ||
+      state.busy ||
+      state.attaching ||
+      (!state.current?.messages.length && !state.current?.document);
     $('#attach-document').disabled =
       !state.initialized || state.busy || state.attaching || !!state.current?.document;
     $('#remove-document').disabled = state.busy || state.attaching;
@@ -835,6 +841,37 @@ export function createApp({
     announce(all ? 'Historial eliminado.' : 'Conversación eliminada.');
   }
 
+  async function duplicate() {
+    if (
+      !state.initialized ||
+      state.busy ||
+      state.attaching ||
+      (!state.current?.messages.length && !state.current?.document)
+    )
+      return;
+    const copy = duplicateConversation(state.current);
+    state.attaching = true;
+    updateControls();
+    try {
+      const saved = await store.save(copy);
+      if (saved === false) throw new Error('El almacenamiento rechazó la copia.');
+      state.conversations.push(copy);
+      publishSync({ type: 'conversation-changed', id: copy.id, updatedAt: copy.updatedAt });
+      state.attaching = false;
+      $('#manage-dialog').close();
+      selectConversation(copy);
+      showNotice('Copia creada. Puedes continuar aquí; la conversación original se conserva.');
+      announce('Conversación duplicada.');
+      return copy;
+    } catch (error) {
+      console.error('No se pudo duplicar la conversación:', error);
+      showNotice('No se pudo guardar la copia. Vuelve a intentarlo.', 'error');
+    } finally {
+      state.attaching = false;
+      updateControls();
+    }
+  }
+
   function download(format) {
     const conversation = state.current;
     const text =
@@ -1181,6 +1218,7 @@ export function createApp({
     );
     $('#export-md').addEventListener('click', () => download('md'));
     $('#export-json').addEventListener('click', () => download('json'));
+    $('#duplicate-chat').addEventListener('click', () => void duplicate());
     $('#delete-chat').addEventListener('click', () => void remove());
     $('#clear-data').addEventListener('click', () => void remove(true));
     $('#privacy').addEventListener('click', () => $('#privacy-dialog').showModal());
@@ -1282,6 +1320,7 @@ export function createApp({
     loadModel,
     selectConversation,
     remove,
+    duplicate,
     save,
     attachDocument,
     acceptDocument,

@@ -41,6 +41,12 @@ Si no hay coincidencias, la aplicación lo indica sin ejecutar inferencia. La b�
 
 La exportación JSON incluye el texto extraído y sus páginas mientras el documento esté adjunto. No se conserva ni exporta el PDF binario, sus imágenes o su maquetación. Markdown incluye los fragmentos consultados en cada respuesta. Ambos archivos pueden contener información privada.
 
+## Duplicar una conversación
+
+Abre **Opciones de conversación (•••)** y pulsa **Duplicar conversación** para continuar en una copia independiente. Conserva los mensajes, el modelo registrado, el documento, la página seleccionada y las referencias. La original permanece en el historial; cada copia puede renombrarse, exportarse y eliminarse por separado. El borrador sin enviar permanece en la original.
+
+La copia se abre después de guardarse en el navegador. No requiere cargar el modelo y no está disponible mientras se genera una respuesta o se adjunta un documento.
+
 ## PDF por páginas
 
 La vista previa permite recorrer el texto de cada página. En el documento adjunto, **Consultar** permite elegir todas las páginas o una concreta; la selección se conserva al recargar. Las fuentes muestran su página original y permiten desplegar el texto completo de esa página. Las páginas sin texto conservan su número.

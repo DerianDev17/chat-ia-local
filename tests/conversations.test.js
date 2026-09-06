@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildContext,
+  duplicateConversation,
   exportMarkdown,
   newConversation,
   newMessage,
@@ -9,6 +10,35 @@ import {
   validatePrompt,
   INPUT_BUDGET,
 } from '../src/conversations.js';
+
+test('duplicates independent messages and PDF sources with fresh IDs', () => {
+  const original = newConversation();
+  original.document = {
+    id: 'document-original',
+    pages: [{ page: 2, text: 'Texto original' }],
+    chunks: [{ id: 1, page: 2, text: 'Texto original' }],
+  };
+  original.documentPage = 2;
+  original.useDocument = false;
+  original.messages = [newMessage('assistant', 'Respuesta [1]', 'generating')];
+  original.messages[0].sources = [
+    { id: 1, documentId: original.document.id, page: 2, text: 'Texto original' },
+  ];
+  const before = structuredClone(original);
+  const copy = duplicateConversation(original);
+  assert.notEqual(copy.id, original.id);
+  assert.notEqual(copy.document.id, original.document.id);
+  assert.notEqual(copy.messages[0].id, original.messages[0].id);
+  assert.equal(copy.messages[0].sources[0].documentId, copy.document.id);
+  assert.equal(copy.messages[0].sources[0].id, 1);
+  assert.equal(copy.messages[0].status, 'interrupted');
+  assert.equal(copy.documentPage, 2);
+  assert.equal(copy.useDocument, false);
+  assert.equal(copy.model, original.model);
+  copy.document.pages[0].text = 'Cambio';
+  copy.messages[0].sources[0].text = 'Cambio';
+  assert.deepEqual(original, before);
+});
 
 test('rejects whitespace and UTF-8 input exceeding the local context', () => {
   assert.ok(validatePrompt('  \n '));
