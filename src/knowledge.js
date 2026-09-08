@@ -42,6 +42,17 @@ export function projectKnowledge(entries, project) {
   return entries.filter((entry) => projectKey(entry.project) === projectKey(project));
 }
 
+export function searchKnowledge(entries, query = '', kind = '') {
+  const normalize = (value) =>
+    value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('es');
+  const words = normalize(query).trim().split(/\s+/).filter(Boolean);
+  return entries.filter(
+    (entry) =>
+      (!kind || entry.kind === kind) &&
+      words.every((word) => normalize(`${entry.title}\n${entry.text}`).includes(word)),
+  );
+}
+
 export function buildKnowledgeContext(question, entries, project, history = []) {
   const selected = projectKnowledge(entries, project);
   const originals = new Map();

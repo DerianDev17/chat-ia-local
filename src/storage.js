@@ -205,6 +205,44 @@ export class ConversationStore {
       return result;
     }, 'knowledge').then((result) => result.deleted);
   }
+
+  importKnowledge(entries) {
+    const snapshots = structuredClone(entries);
+    return this.write((store, tx) => {
+      const result = { imported: 0, skipped: 0 };
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const key = (entry) =>
+          JSON.stringify([
+            entry.project.trim().normalize('NFC').toLocaleLowerCase('es'),
+            entry.kind,
+            entry.text,
+            entry.document?.pages,
+          ]);
+        const known = new Set(request.result.map(key));
+        const pending = [];
+        for (const entry of snapshots) {
+          const identity = key(entry);
+          if (known.has(identity)) {
+            result.skipped++;
+            continue;
+          }
+          known.add(identity);
+          pending.push(entry);
+        }
+        if (request.result.length + pending.length > 100) {
+          result.error = new Error(
+            'La biblioteca superaría las 100 entradas. No se importó ninguna.',
+          );
+          tx.abort();
+          return;
+        }
+        for (const entry of pending) store.add(entry);
+        result.imported = pending.length;
+      };
+      return result;
+    }, 'knowledge');
+  }
   close() {
     this.db?.close();
   }
