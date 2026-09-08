@@ -1,5 +1,12 @@
 import { readDocument } from './documents.js';
-import { knowledgeNote, knowledgeDocument, projectName, projectKnowledge } from './knowledge.js';
+import {
+  knowledgeNote,
+  knowledgeDocument,
+  projectName,
+  projectKnowledge,
+  searchKnowledge,
+} from './knowledge.js';
+import { exportKnowledgeBackup, readKnowledgeBackup } from './knowledge-backup.js';
 
 export function createKnowledgeUI({ document: doc, store, current, locked, setLocked, changed }) {
   const $ = (selector) => doc.querySelector(selector);
@@ -8,8 +15,10 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
   let pendingDocument = null;
   let origin = null;
   let busy = false;
+  let pendingImport = null;
   const status = (text) => {
     $('#knowledge-status').textContent = text;
+    if ($('#import-knowledge-dialog').open) $('#import-knowledge-status').textContent = text;
   };
 
   function reset() {
@@ -27,9 +36,14 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
     const list = $('#knowledge-list');
     list.replaceChildren();
     const project = $('#knowledge-project').value;
-    for (const entry of projectKnowledge(entries, project).sort(
-      (a, b) => b.updatedAt - a.updatedAt,
-    )) {
+    const projectEntries = projectKnowledge(entries, project);
+    const matches = searchKnowledge(
+      projectEntries,
+      $('#knowledge-search').value,
+      $('#knowledge-kind').value,
+    );
+    $('#knowledge-count').textContent = `${matches.length} de ${projectEntries.length} entradas`;
+    for (const entry of matches.sort((a, b) => b.updatedAt - a.updatedAt)) {
       const item = doc.createElement('li');
       const name = doc.createElement('strong');
       name.textContent = entry.title;
@@ -49,7 +63,7 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
         $('#knowledge-text').value = entry.text;
         $('#knowledge-text').readOnly = entry.kind === 'document';
         $('#knowledge-origin').textContent = entry.origin
-          ? `Origen: ${entry.origin.title || 'Conversación'} · ${entry.origin.role === 'assistant' ? 'respuesta del asistente' : 'mensaje del usuario'}. Revisa el contenido antes de guardarlo.`
+          ? `${entry.origin.imported ? 'Copia importada; independiente del chat original. ' : ''}Origen: ${entry.origin.title || 'Conversación'} · ${entry.origin.role === 'assistant' ? 'respuesta del asistente' : 'mensaje del usuario'}. Revisa el contenido antes de guardarlo.`
           : '';
         $('#save-knowledge').textContent = 'Guardar cambios';
         status('');
@@ -92,7 +106,9 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
     }
     if (!list.children.length) {
       const empty = doc.createElement('li');
-      empty.textContent = 'Este proyecto todavía no tiene documentos, notas ni recuerdos.';
+      empty.textContent = projectEntries.length
+        ? 'No hay coincidencias. Cambia la búsqueda o el tipo.'
+        : 'Este proyecto todavía no tiene documentos, notas ni recuerdos.';
       list.append(empty);
     }
   }
@@ -117,6 +133,8 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
     setLocked(true);
     $('#knowledge-form').inert = true;
     $('#knowledge-list').inert = true;
+    $('#knowledge-tools').inert = true;
+    $('#confirm-knowledge-import').disabled = true;
     try {
       await action();
     } catch (error) {
@@ -126,12 +144,16 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
       setLocked(false);
       $('#knowledge-form').inert = false;
       $('#knowledge-list').inert = false;
+      $('#knowledge-tools').inert = false;
+      $('#confirm-knowledge-import').disabled = !pendingImport?.length;
     }
   }
 
   async function open(message = null) {
     if (locked() || busy) return;
     reset();
+    $('#knowledge-search').value = '';
+    $('#knowledge-kind').value = '';
     $('#knowledge-project').value = projectName(current().project);
     if (message) {
       origin = {
@@ -152,6 +174,63 @@ export function createKnowledgeUI({ document: doc, store, current, locked, setLo
   }
 
   $('#knowledge-project').addEventListener('input', render);
+  $('#knowledge-search').addEventListener('input', render);
+  $('#knowledge-kind').addEventListener('change', render);
+  $('#export-knowledge').addEventListener(
+    'click',
+    () =>
+      void run(async () => {
+        const json = exportKnowledgeBackup(await store.listKnowledge());
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const link = doc.createElement('a');
+        link.href = url;
+        link.download = 'semilla-biblioteca.json';
+        doc.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        status('Copia exportada con todos los proyectos, documentos, notas y recuerdos.');
+      }),
+  );
+  $('#knowledge-backup-file').addEventListener('change', () => {
+    const file = $('#knowledge-backup-file').files?.[0];
+    if (!file) return;
+    void run(async () => {
+      pendingImport = null;
+      const imported = await readKnowledgeBackup(file);
+      pendingImport = imported;
+      $('#import-knowledge-status').textContent = '';
+      $('#import-knowledge-summary').textContent =
+        `${imported.length} entradas de ${new Set(imported.map((entry) => projectName(entry.project).toLocaleLowerCase('es'))).size} proyectos. Se omitirán duplicados y se conservará el contenido existente.`;
+      $('#import-knowledge-preview').replaceChildren(
+        ...imported.map((entry) => {
+          const item = doc.createElement('li');
+          item.textContent = `${entry.project} · ${entry.title} · ${entry.text.slice(0, 120)}`;
+          return item;
+        }),
+      );
+      $('#confirm-knowledge-import').disabled = !imported.length;
+      $('#import-knowledge-dialog').showModal();
+    }).finally(() => {
+      $('#knowledge-backup-file').value = '';
+    });
+  });
+  $('#import-knowledge-dialog').addEventListener('close', () => {
+    pendingImport = null;
+  });
+  $('#confirm-knowledge-import').addEventListener('click', () => {
+    if (!pendingImport?.length) return;
+    const imported = pendingImport;
+    void run(async () => {
+      const result = await store.importKnowledge(imported);
+      $('#import-knowledge-dialog').close();
+      await refresh();
+      changed();
+      status(
+        `${result.imported} entradas importadas; ${result.skipped} duplicadas omitidas. Selecciona su proyecto para verlas.`,
+      );
+    });
+  });
   $('#new-knowledge').addEventListener('click', () => {
     if (!busy) {
       reset();

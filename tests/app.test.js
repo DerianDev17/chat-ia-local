@@ -16,6 +16,106 @@ async function settleKnowledge(page) {
   assert.equal(page.app.state.attaching, false, 'knowledge operation completed');
 }
 
+test('backup preview requires confirmation, safely restores entries and exports all projects', async (t) => {
+  const { exportKnowledgeBackup, parseKnowledgeBackup } =
+    await import('../src/knowledge-backup.js');
+  const { knowledgeNote } = await import('../src/knowledge.js');
+  const page = await setup({ supported: false });
+  const entries = [
+    knowledgeNote({
+      title: '<img src=x onerror=alert(1)>',
+      text: 'Instalación con pnpm',
+      project: 'General',
+    }),
+    knowledgeNote({ title: 'Otra nota', text: 'Datos de otro proyecto', project: 'Otro' }),
+  ];
+  const json = exportKnowledgeBackup(entries);
+  const file = {
+    name: 'copia.json',
+    size: new TextEncoder().encode(json).length,
+    async arrayBuffer() {
+      return new TextEncoder().encode(json).buffer;
+    },
+  };
+  page.$('#open-knowledge').click();
+  await settleKnowledge(page);
+  Object.defineProperty(page.$('#knowledge-backup-file'), 'files', { value: [file] });
+  const preview = async () => {
+    page.$('#knowledge-backup-file').dispatchEvent(new page.window.Event('change'));
+    await settleKnowledge(page);
+  };
+  await preview();
+  assert.equal(page.$('#import-knowledge-dialog').open, true);
+  assert.equal(page.$('#import-knowledge-preview img'), null);
+  assert.deepEqual(await page.store.listKnowledge(), []);
+  page.$('#import-knowledge-dialog').close();
+  assert.deepEqual(await page.store.listKnowledge(), []);
+  await preview();
+  page.$('#confirm-knowledge-import').click();
+  await settleKnowledge(page);
+  assert.equal(page.$('#import-knowledge-dialog').open, false);
+  assert.equal((await page.store.listKnowledge()).length, 2);
+  page.$('#knowledge-search').value = 'instalacion';
+  page.$('#knowledge-search').dispatchEvent(new page.window.Event('input'));
+  assert.equal(page.$('#knowledge-count').textContent, '1 de 1 entradas');
+  page.$('#knowledge-kind').value = 'memory';
+  page.$('#knowledge-kind').dispatchEvent(new page.window.Event('change'));
+  assert.match(page.$('#knowledge-list').textContent, /No hay coincidencias/);
+  let blob;
+  t.mock.method(URL, 'createObjectURL', (value) => {
+    blob = value;
+    return 'blob:test';
+  });
+  page.window.HTMLAnchorElement.prototype.click = function () {
+    assert.equal(this.download, 'semilla-biblioteca.json');
+  };
+  page.$('#export-knowledge').click();
+  await settleKnowledge(page);
+  assert.equal(parseKnowledgeBackup(await blob.text()).length, 2);
+  await preview();
+  page.$('#confirm-knowledge-import').click();
+  await settleKnowledge(page);
+  assert.match(page.$('#knowledge-status').textContent, /0 entradas importadas; 2 duplicadas/);
+  page.close();
+});
+
+test('failed import reports the error inside its preview and retains the pending backup', async () => {
+  const { exportKnowledgeBackup } = await import('../src/knowledge-backup.js');
+  const { knowledgeNote } = await import('../src/knowledge.js');
+  const page = await setup({ supported: false });
+  const json = exportKnowledgeBackup([knowledgeNote({ title: 'Nota', text: 'Texto' })]);
+  page.$('#open-knowledge').click();
+  await settleKnowledge(page);
+  Object.defineProperty(page.$('#knowledge-backup-file'), 'files', {
+    value: [
+      {
+        name: 'copia.json',
+        size: json.length,
+        async arrayBuffer() {
+          return new TextEncoder().encode(json).buffer;
+        },
+      },
+    ],
+  });
+  page.$('#knowledge-backup-file').dispatchEvent(new page.window.Event('change'));
+  await settleKnowledge(page);
+  const original = page.store.importKnowledge.bind(page.store);
+  page.store.importKnowledge = async () => {
+    throw new Error('Sin espacio');
+  };
+  page.$('#confirm-knowledge-import').click();
+  await settleKnowledge(page);
+  assert.equal(page.$('#import-knowledge-dialog').open, true);
+  assert.match(page.$('#import-knowledge-status').textContent, /Sin espacio/);
+  assert.equal(page.$('#confirm-knowledge-import').disabled, false);
+  assert.equal((await page.store.listKnowledge()).length, 0);
+  page.store.importKnowledge = original;
+  page.$('#confirm-knowledge-import').click();
+  await settleKnowledge(page);
+  assert.equal((await page.store.listKnowledge()).length, 1);
+  page.close();
+});
+
 test('remembers a reviewed chat message and retrieves it with citations in a new chat', async () => {
   const calls = [];
   const page = await setup({

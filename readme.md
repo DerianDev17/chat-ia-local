@@ -54,6 +54,16 @@ Se conservan los límites de archivos existentes y se admiten hasta 100 entradas
 
 Esta versión recuerda información explícita y busca por palabras: no reentrena el modelo ni genera recuerdos automáticamente, y no incluye embeddings. Borrar los datos del navegador elimina también la biblioteca.
 
+### Buscar y respaldar la biblioteca
+
+En **Contenido del proyecto**, busca por título o texto y filtra por documentos, notas o recuerdos. La búsqueda ignora mayúsculas y tildes y muestra el número de coincidencias dentro del proyecto seleccionado.
+
+**Exportar biblioteca** descarga `semilla-biblioteca.json` con todos los proyectos, incluso si hay un filtro activo. Incluye el texto de los documentos, las páginas extraídas de PDF, las notas y los recuerdos; no incluye los chats completos ni el PDF binario. La copia puede contener información privada y no está cifrada.
+
+Para restaurarla en otro navegador, usa **Importar copia JSON**, revisa las entradas y pulsa **Confirmar importación**. Se valida el archivo (hasta 64 MB), se reconstruyen los fragmentos y se asignan IDs nuevos. Se omiten entradas del mismo tipo, proyecto y contenido (con las mismas páginas en PDF), sin sobrescribir las existentes. Si falla el guardado o se superan las 100 entradas, no se importa ninguna.
+
+Los recuerdos importados conservan el título y el rol de su origen como referencia, pero son independientes de los chats locales. Para eliminarlos usa **Olvidar** en la biblioteca. Un JSON exportado desde las opciones de una conversación tiene otro formato y no se importa desde este panel.
+
 ## Duplicar una conversación
 
 Abre **Opciones de conversación (•••)** y pulsa **Duplicar conversación** para continuar en una copia independiente. Conserva los mensajes, el modelo registrado, el documento, la página seleccionada y las referencias. La original permanece en el historial; cada copia puede renombrarse, exportarse y eliminarse por separado. El borrador sin enviar permanece en la original.

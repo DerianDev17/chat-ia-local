@@ -260,6 +260,16 @@
         Guarda documentos, notas y recuerdos para otros chats del mismo proyecto. Todo permanece en
         este navegador. Los recuerdos se guardan cuando tú lo decides; el modelo no se reentrena.
       </p>
+      <div id="knowledge-tools">
+        <button id="export-knowledge" class="secondary-button">Exportar biblioteca</button>
+        <label
+          >Importar copia JSON
+          <input id="knowledge-backup-file" type="file" accept=".json,application/json"
+        /></label>
+        <p>
+          La copia incluye todos los proyectos y puede contener información privada. Límite: 64 MB.
+        </p>
+      </div>
       <form id="knowledge-form">
         <label
           >Proyecto
@@ -279,7 +289,39 @@
       </form>
       <p id="knowledge-status" role="status" aria-live="polite"></p>
       <h3>Contenido del proyecto</h3>
+      <div class="knowledge-filters">
+        <label
+          >Buscar contenido <input id="knowledge-search" type="search" placeholder="Título o texto"
+        /></label>
+        <label
+          >Tipo
+          <select id="knowledge-kind">
+            <option value="">Todos</option>
+            <option value="document">Documentos</option>
+            <option value="note">Notas</option>
+            <option value="memory">Recuerdos</option>
+          </select></label
+        >
+      </div>
+      <p id="knowledge-count" role="status"></p>
       <ul id="knowledge-list"></ul>
+    </dialog>
+    <dialog id="import-knowledge-dialog" aria-labelledby="import-knowledge-heading">
+      <div class="dialog-heading">
+        <h2 id="import-knowledge-heading">Importar biblioteca</h2>
+        <button class="icon-button" data-close aria-label="Cerrar">×</button>
+      </div>
+      <p id="import-knowledge-summary"></p>
+      <p>
+        Los recuerdos importados son copias independientes: no se vinculan a chats de este
+        navegador. Puedes eliminarlos con «Olvidar».
+      </p>
+      <ul id="import-knowledge-preview"></ul>
+      <p id="import-knowledge-status" role="status"></p>
+      <div class="button-row">
+        <button class="secondary-button" data-close>Cancelar</button
+        ><button id="confirm-knowledge-import" class="primary-button">Confirmar importación</button>
+      </div>
     </dialog>
     <datalist id="knowledge-projects"></datalist>
     <dialog id="forget-dialog" aria-labelledby="forget-heading">
