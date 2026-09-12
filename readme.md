@@ -27,6 +27,8 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 - Copia de respuestas y exportación de conversaciones a Markdown o JSON.
 - Importación de conversaciones JSON con vista previa, validación y guardado como copias independientes.
 - Modos de respuesta por conversación: equilibrada, breve, detallada y paso a paso.
+- Biblioteca y memoria entre chats con coincidencias exactas, familias de palabras y equivalencias conceptuales locales.
+- Referencias que distinguen los recuerdos consultados de los recuerdos citados por cada respuesta.
 - Markdown saneado con DOMPurify. El contenido del modelo no puede insertar scripts, imágenes de seguimiento ni marcos externos.
 - Aviso de fallos de almacenamiento y conservación de mensajes en memoria para poder exportarlos.
 - Recuperación de respuestas interrumpidas al recargar y guardado periódico durante la generación.
@@ -35,11 +37,11 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 
 1. Pulsa **＋ Documento** y selecciona un `.txt` o `.md` de hasta 100 KB, codificado en UTF-8, o un `.pdf` de hasta 10 MB y 100 páginas.
 2. Revisa la vista previa y pulsa **Usar documento**. Se guarda junto a la conversación, incluso si todavía no hay mensajes.
-3. Con el modelo cargado, haz una pregunta concreta. La búsqueda selecciona hasta tres fragmentos por coincidencia de palabras, sin enviar el archivo a un servidor.
+3. Con el modelo cargado, haz una pregunta concreta. La búsqueda selecciona hasta tres fragmentos por coincidencia exacta, familia de palabras o equivalencia conceptual local, sin enviar el archivo a un servidor.
 4. Pulsa una referencia como `[1]` o un botón de **Fragmentos consultados** para ver el texto original. Una referencia que el modelo invente no se convierte en botón.
 5. Desmarca **Responder con este documento** para volver al chat general. **Retirar** borra el documento y sus fragmentos guardados tras una confirmación; los mensajes ya escritos pueden contener citas y se conservan. Elimina la conversación para borrarlos también.
 
-Si no hay coincidencias, la aplicación lo indica sin ejecutar inferencia. La búsqueda no es semántica: puede omitir sinónimos y no utiliza el historial para interpretar preguntas como «¿y eso?». Los resúmenes de documentos grandes son parciales y la interfaz lo advierte. Las referencias identifican material consultado, no certifican que la respuesta sea correcta.
+Si no hay coincidencias, la aplicación lo indica sin ejecutar inferencia. La búsqueda reconoce un vocabulario pequeño de equivalencias y familias frecuentes; no usa embeddings ni pretende comprender cualquier paráfrasis. Las preguntas de seguimiento como «¿y eso?» aprovechan los turnos recientes cuando hay una consulta previa clara. Los resúmenes de documentos grandes son parciales y la interfaz lo advierte. Las referencias identifican material consultado, no certifican que la respuesta sea correcta.
 
 La exportación JSON incluye el texto extraído y sus páginas mientras el documento esté adjunto. No se conserva ni exporta el PDF binario, sus imágenes o su maquetación. Markdown incluye los fragmentos consultados en cada respuesta. Ambos archivos pueden contener información privada.
 
@@ -47,7 +49,7 @@ La exportación JSON incluye el texto extraído y sus páginas mientras el docum
 
 1. Abre **Biblioteca y memoria** en el menú lateral. Escribe un proyecto (por defecto **General**) y añade una nota o importa un archivo `.txt`, `.md` o `.pdf`. Revisa el texto antes de guardarlo.
 2. En un chat, pulsa **Recordar esto** bajo un mensaje. Revisa o corrige su contenido, elige el proyecto y pulsa **Guardar recuerdo**. Las respuestas del asistente no se guardan automáticamente como hechos.
-3. En otra conversación, selecciona el mismo **Proyecto** y activa **Usar biblioteca y memoria**. La búsqueda selecciona hasta tres fragmentos relevantes por palabras y muestra referencias con su título y página, o el chat de origen del recuerdo. Los turnos recientes completos se incluyen cuando caben en el contexto.
+3. En otra conversación, selecciona el mismo **Proyecto** y activa **Usar biblioteca y memoria**. La búsqueda selecciona hasta tres fragmentos relevantes por coincidencia exacta, familia de palabras o equivalencia conceptual y muestra referencias con su título y página, o el chat de origen del recuerdo. Sobre la respuesta se indica qué recuerdos se citaron y cuántos fragmentos se consultaron. Los turnos recientes completos se incluyen cuando caben en el contexto.
 4. Usa **Ver / editar** para corregir notas o recuerdos, y **Olvidar** para eliminarlos tras confirmar. Los documentos permiten revisar el texto y cambiar su título o proyecto. Para reemplazar su contenido, elimina la entrada e importa la nueva versión.
 
 Los proyectos se identifican por nombre, ignorando mayúsculas y espacios de los extremos. No se consulta la biblioteca de otros proyectos. Un documento adjunto con **Responder con este documento** activo tiene prioridad sobre la biblioteca. Si no hay coincidencias, la app lo indica sin ejecutar el modelo; puedes reformular o desactivar la consulta.
@@ -56,7 +58,11 @@ En la barra inferior puedes elegir el modo de respuesta: **Equilibrada**, **Brev
 
 Se conservan los límites de archivos existentes y se admiten hasta 100 entradas en la biblioteca. Los datos permanecen en IndexedDB, con migración del historial anterior. Borrar un chat elimina sus recuerdos derivados; borrar todo el historial conserva las notas y documentos independientes. Las respuestas y exportaciones anteriores pueden conservar citas del contenido eliminado. Las exportaciones de conversación incluyen los fragmentos consultados, no una copia completa de la biblioteca.
 
-Esta versión recuerda información explícita y busca por palabras: no reentrena el modelo ni genera recuerdos automáticamente, y no incluye embeddings. Borrar los datos del navegador elimina también la biblioteca.
+Esta versión recuerda información explícita y busca con reglas locales de coincidencia: no reentrena el modelo, no genera recuerdos automáticamente y no incluye embeddings. Borrar los datos del navegador elimina también la biblioteca.
+
+### Medir la calidad de la recuperación
+
+Ejecuta `pnpm test:evaluation` para comprobar un conjunto determinista de preguntas sobre documentos y recuerdos. Incluye coincidencias exactas y conceptuales, preguntas de seguimiento, límites por página, preguntas sin respuesta y validación de citas. La salida muestra los casos aprobados; `pnpm test` también incluye estas comprobaciones.
 
 ### Buscar y respaldar la biblioteca
 

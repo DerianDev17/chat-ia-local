@@ -1,6 +1,6 @@
 # Próximas funcionalidades
 
-Entregado: biblioteca local de documentos y notas por proyecto, recuerdos explícitos desde mensajes, edición y borrado, consulta entre chats con referencias, búsqueda por texto y tipo, copias completas de la biblioteca con restauración validada y migración del historial. Próximas ampliaciones: embeddings multilingües y propuestas de recuerdos revisables.
+Entregado: biblioteca local de documentos y notas por proyecto, recuerdos explícitos desde mensajes, edición y borrado, consulta entre chats con referencias, búsqueda por texto y tipo, coincidencias conceptuales locales, indicación de recuerdos consultados y citados, copias completas de la biblioteca con restauración validada y migración del historial. Próximas ampliaciones: embeddings multilingües y propuestas de recuerdos revisables.
 
 Ya están implementadas la consulta de texto y PDF por páginas, la administración de modelos/caché, la importación de conversaciones, la edición de preguntas en versiones independientes y los modos de respuesta configurables.
 
@@ -28,4 +28,8 @@ Ya están implementadas la consulta de texto y PDF por páginas, la administraci
 - Vista del texto por página, filtro de consulta y referencias con número de página, conservadas en el historial y exportaciones.
 - Pruebas de selección, conservación del historial, borrado de caché, PDF real, páginas vacías, archivos inválidos y límites.
 
-Ampliaciones futuras: OCR, visor de la maquetación original y búsqueda semántica. La compatibilidad de GPU debe seguir validándose en los equipos objetivo, especialmente para el modelo 3B.
+Ampliaciones futuras: OCR, visor de la maquetación original y embeddings multilingües para cubrir paráfrasis fuera del vocabulario local. La compatibilidad de GPU debe seguir validándose en los equipos objetivo, especialmente para el modelo 3B.
+
+## Entregado: evaluación de recuperación y citas
+
+El conjunto determinista de `tests/evaluation-cases.js` cubre preguntas exactas y conceptuales, seguimiento con historial, alcance por página, ausencia de información y citas válidas o inventadas. Ejecuta `pnpm test:evaluation` para obtener el resultado resumido antes de cambiar el recuperador.

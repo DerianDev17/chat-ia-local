@@ -23,6 +23,8 @@ Las pruebas automatizadas de interfaz utilizan un motor simulado. La descarga co
 
 El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensiones con permisos sobre la página o scripts del mismo origen. Los archivos de modelo y runtime externos siguen dependiendo de sus proveedores. Hay avisos de cambios entre pestañas del mismo origen mediante BroadcastChannel; no hay sincronización entre dispositivos ni backend de cuentas.
 
+La búsqueda de biblioteca usa únicamente normalización, familias de palabras y un vocabulario fijo de equivalencias en el navegador. No envía consultas a servicios externos ni genera vectores remotos. Las puntuaciones ayudan a ordenar fragmentos, pero no demuestran que una respuesta sea correcta; la evaluación determinista de `tests/evaluation-cases.js` comprueba recuperación, ausencia de información y referencias conocidas.
+
 La importación de conversaciones admite únicamente el esquema JSON de versión 1, UTF-8 y hasta 16 MB, con un máximo de 2.000 mensajes y 64 KB por mensaje. Reconstruye una lista explícita de campos, rechaza roles ajenos a usuario/asistente y no reutiliza IDs importados. Los fragmentos de documentos se recalculan desde texto validado; las vistas previas usan texto inerte y las respuestas mantienen el saneamiento de Markdown. Los fragmentos de biblioteca importados no apuntan a entradas locales existentes.
 
 El modo de respuesta solo añade una instrucción de estilo al mensaje de sistema local. No cambia los límites de entrada, no concede herramientas al modelo y no convierte una respuesta detallada en una garantía de exactitud.
