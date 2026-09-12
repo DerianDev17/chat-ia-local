@@ -148,6 +148,7 @@ test('remembers a reviewed chat message and retrieves it with citations in a new
   await page.app.submit();
   assert.match(JSON.stringify(calls.at(-1)), /Este proyecto utiliza pnpm/);
   assert.equal(page.app.state.current.messages.at(-1).sources[0].knowledgeId, memory.id);
+  assert.match(page.$('.source-usage').textContent, /Recuerdos citados en la respuesta/);
   page.$('[data-source]').click();
   assert.match(page.$('#source-detail').textContent, /Recuerdo de:/);
   page.$('#source-dialog').close();

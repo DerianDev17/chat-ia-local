@@ -9,6 +9,9 @@ test('local conceptual search recognizes common synonyms and multilingual terms'
   assert.equal(matchesSearch('warranty', 'La garantía cubre dos años.'), true);
   assert.ok(retrievalScore('precio', 'precio') > retrievalScore('precio', 'coste'));
   assert.equal(retrievalScore('astronomía', 'La garantía cubre dos años.'), 0);
+  assert.equal(matchesSearch('instalaciones', 'Instalar dependencias con pnpm.'), true);
+  assert.equal(matchesSearch('duración', 'El contrato tiene un periodo de doce meses.'), true);
+  assert.equal(matchesSearch('anular', 'Puedes cancelar la reserva.'), true);
 });
 
 test('synonym retrieval keeps the project boundary and returns inspectable memory sources', () => {

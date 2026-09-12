@@ -500,7 +500,9 @@ export function createApp({
       const references = doc.createElement('div');
       references.className = 'source-list';
       const label = doc.createElement('span');
-      label.textContent = 'Fragmentos consultados:';
+      label.textContent = message.sources.some((source) => source.knowledgeId)
+        ? 'Recuerdos consultados:'
+        : 'Fragmentos consultados:';
       references.append(label);
       for (const source of message.sources) {
         const button = doc.createElement('button');
@@ -513,6 +515,15 @@ export function createApp({
       item.append(references);
     }
     if (message.role === 'assistant') {
+      if (message.knowledgeMode && message.status !== 'generating' && message.sources?.length) {
+        const used = citedSources(message);
+        const usage = doc.createElement('p');
+        usage.className = 'source-usage';
+        usage.textContent = used.length
+          ? `Recuerdos citados en la respuesta: ${used.map((source) => `[${source.id}] ${source.name}`).join(' · ')}`
+          : `No hay recuerdos citados; se consultaron ${message.sources.length} fragmentos.`;
+        item.append(usage);
+      }
       const review = message.status !== 'generating' ? reviewSources(message) : null;
       if (review) {
         const warning = doc.createElement('p');
@@ -758,6 +769,7 @@ export function createApp({
     reply.content = '';
     delete reply.finishReason;
     reply.documentMode = !!documentContext;
+    reply.knowledgeMode = documentContext?.kind === 'knowledge';
     if (documentContext) reply.retrievalTopic = context.topic;
     else delete reply.retrievalTopic;
     if (documentContext) reply.sources = structuredClone(context.sources);

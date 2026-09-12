@@ -9,7 +9,7 @@ const stopWords = new Set(
 );
 const groups = [
   ['precio', 'precios', 'costo', 'costos', 'coste', 'importe', 'tarifa', 'price', 'cost', 'fee'],
-  ['vence', 'vencimiento', 'caduca', 'caducidad', 'expira', 'deadline', 'expiry'],
+  ['vence', 'vencimiento', 'caduca', 'caducidad', 'expira', 'deadline', 'expiry', 'plazo'],
   ['garantia', 'garantias', 'warranty', 'guarantee'],
   ['automovil', 'automoviles', 'coche', 'coches', 'auto', 'autos', 'car'],
   ['empleado', 'empleados', 'trabajador', 'trabajadores', 'personal', 'staff', 'employee'],
@@ -21,6 +21,10 @@ const groups = [
   ['vacacion', 'vacaciones', 'vacation', 'holiday'],
   ['contrasena', 'password'],
   ['contrato', 'contratos', 'contract'],
+  ['duracion', 'periodo', 'duration', 'period'],
+  ['responder', 'respuesta', 'contestar', 'answer', 'reply'],
+  ['cancelar', 'cancelacion', 'anular', 'cancel', 'void'],
+  ['problema', 'error', 'fallo', 'incidencia', 'issue', 'problem', 'failure'],
 ];
 const concepts = new Map(groups.flatMap((group, index) => group.map((word) => [word, index])));
 export function searchTerms(text) {
@@ -28,9 +32,17 @@ export function searchTerms(text) {
     (word) => !stopWords.has(word),
   );
 }
+function stem(word) {
+  if (word.length < 5) return word;
+  return word
+    .replace(/(aciones|imientos|amiento|imiento|acion|mente)$/u, '')
+    .replace(/(ando|iendo|ados|idos|adas|idas|ar|er|ir|es|s|ed|ing)$/u, '');
+}
 function matches(word, words) {
+  const candidateStems = new Set([...words].map(stem));
   return (
     words.has(word) ||
+    candidateStems.has(stem(word)) ||
     (concepts.has(word) &&
       [...words].some((candidate) => concepts.get(candidate) === concepts.get(word)))
   );
@@ -46,7 +58,15 @@ export function retrievalScore(query, text) {
   const words = new Set(searchTerms(text));
   return (
     searchTerms(query).reduce(
-      (score, word) => score + (words.has(word) ? 1 : matches(word, words) ? 0.65 : 0),
+      (score, word) =>
+        score +
+        (words.has(word)
+          ? 1
+          : concepts.has(word) && matches(word, words)
+            ? 0.65
+            : matches(word, words)
+              ? 0.55
+              : 0),
       0,
     ) / Math.sqrt(words.size || 1)
   );
