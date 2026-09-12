@@ -25,6 +25,8 @@ El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensio
 
 La importación de conversaciones admite únicamente el esquema JSON de versión 1, UTF-8 y hasta 16 MB, con un máximo de 2.000 mensajes y 64 KB por mensaje. Reconstruye una lista explícita de campos, rechaza roles ajenos a usuario/asistente y no reutiliza IDs importados. Los fragmentos de documentos se recalculan desde texto validado; las vistas previas usan texto inerte y las respuestas mantienen el saneamiento de Markdown. Los fragmentos de biblioteca importados no apuntan a entradas locales existentes.
 
+El modo de respuesta solo añade una instrucción de estilo al mensaje de sistema local. No cambia los límites de entrada, no concede herramientas al modelo y no convierte una respuesta detallada en una garantía de exactitud.
+
 El borrado conserva marcadores mínimos (ID, tipo y fecha), sin mensajes, documentos ni títulos, para impedir que una generación tardía en otra pestaña restaure datos eliminados. Vaciar el historial también conserva estos marcadores. No se ofrece resolución completa de ediciones simultáneas; utiliza una pestaña por conversación.
 
 ## Comprobar después de un cambio

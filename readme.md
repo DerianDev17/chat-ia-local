@@ -26,6 +26,7 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 - Historial local persistente: buscar por título o contenido, abrir, renombrar y eliminar con confirmación.
 - Copia de respuestas y exportación de conversaciones a Markdown o JSON.
 - Importación de conversaciones JSON con vista previa, validación y guardado como copias independientes.
+- Modos de respuesta por conversación: equilibrada, breve, detallada y paso a paso.
 - Markdown saneado con DOMPurify. El contenido del modelo no puede insertar scripts, imágenes de seguimiento ni marcos externos.
 - Aviso de fallos de almacenamiento y conservación de mensajes en memoria para poder exportarlos.
 - Recuperación de respuestas interrumpidas al recargar y guardado periódico durante la generación.
@@ -50,6 +51,8 @@ La exportación JSON incluye el texto extraído y sus páginas mientras el docum
 4. Usa **Ver / editar** para corregir notas o recuerdos, y **Olvidar** para eliminarlos tras confirmar. Los documentos permiten revisar el texto y cambiar su título o proyecto. Para reemplazar su contenido, elimina la entrada e importa la nueva versión.
 
 Los proyectos se identifican por nombre, ignorando mayúsculas y espacios de los extremos. No se consulta la biblioteca de otros proyectos. Un documento adjunto con **Responder con este documento** activo tiene prioridad sobre la biblioteca. Si no hay coincidencias, la app lo indica sin ejecutar el modelo; puedes reformular o desactivar la consulta.
+
+En la barra inferior puedes elegir el modo de respuesta: **Equilibrada**, **Breve**, **Detallada** o **Paso a paso**. La selección se guarda con cada conversación y se aplica también a consultas de documentos y biblioteca. El modo orienta la extensión y la estructura; no garantiza una longitud exacta ni sustituye revisar la respuesta.
 
 Se conservan los límites de archivos existentes y se admiten hasta 100 entradas en la biblioteca. Los datos permanecen en IndexedDB, con migración del historial anterior. Borrar un chat elimina sus recuerdos derivados; borrar todo el historial conserva las notas y documentos independientes. Las respuestas y exportaciones anteriores pueden conservar citas del contenido eliminado. Las exportaciones de conversación incluyen los fragmentos consultados, no una copia completa de la biblioteca.
 

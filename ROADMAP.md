@@ -2,7 +2,7 @@
 
 Entregado: biblioteca local de documentos y notas por proyecto, recuerdos explícitos desde mensajes, edición y borrado, consulta entre chats con referencias, búsqueda por texto y tipo, copias completas de la biblioteca con restauración validada y migración del historial. Próximas ampliaciones: embeddings multilingües y propuestas de recuerdos revisables.
 
-Ya están implementadas la consulta de texto y PDF por páginas, la administración de modelos/caché, la importación de conversaciones y la edición de preguntas en versiones independientes.
+Ya están implementadas la consulta de texto y PDF por páginas, la administración de modelos/caché, la importación de conversaciones, la edición de preguntas en versiones independientes y los modos de respuesta configurables.
 
 ## Entregado: importar copias de conversaciones
 
