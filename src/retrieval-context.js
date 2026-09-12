@@ -6,7 +6,7 @@ export function isFollowUp(question) {
     .trim();
   return (
     /\b(eso|esa|ese|estos|estas|ellos|ellas|lo anterior)\b/.test(text) ||
-    /^(y\s+)?(cuando (vence|termina|empieza)|cuanto (cuesta|dura)|cual es (el plazo|la fecha)|como (funciona|se hace))$/.test(
+    /^y\s+(cuando (vence|termina|empieza)|cuanto (cuesta|dura)|cual es (el plazo|la fecha)|como (funciona|se hace))$/.test(
       text,
     ) ||
     /^y\s+(cuando|cuanto|donde|como)\b/.test(text)
