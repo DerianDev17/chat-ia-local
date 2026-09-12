@@ -730,8 +730,8 @@ export function createApp({
     showNotice(
       documentContext
         ? context.kind === 'knowledge'
-          ? `Biblioteca y memoria de ${projectName(conversation.project)}: ${context.sources.length} fragmentos consultados. La búsqueda usa palabras; las referencias no garantizan exactitud.${context.summary && context.partial ? ' El resumen es parcial.' : ''}`
-          : `Consulta del documento: ${context.sources.length} de ${conversation.document.chunks.length} fragmentos. ${context.summary && context.partial ? 'El resumen será parcial. ' : ''}La selección usa palabras de esta pregunta; las referencias no garantizan exactitud.`
+          ? `Biblioteca y memoria de ${projectName(conversation.project)}: ${context.sources.length} fragmentos consultados. Búsqueda por palabras y sinónimos locales; las referencias no garantizan exactitud.${context.summary && context.partial ? ' El resumen es parcial.' : ''}`
+          : `Consulta del documento: ${context.sources.length} de ${conversation.document.chunks.length} fragmentos. ${context.summary && context.partial ? 'El resumen será parcial. ' : ''}Búsqueda por palabras, sinónimos locales y contexto reciente; las referencias no garantizan exactitud.`
         : context.trimmed
           ? 'Para mantener la conversación ágil, el modelo usa los intercambios recientes que caben en su contexto. El historial completo sigue guardado.'
           : '',

@@ -1,4 +1,5 @@
 import { buildDocumentContext, splitDocument, MAX_DOCUMENT_BYTES } from './documents.js';
+import { matchesSearch } from './search-language.js';
 
 export const DEFAULT_PROJECT = 'General';
 const bytes = (text) => new TextEncoder().encode(text).length;
@@ -43,13 +44,9 @@ export function projectKnowledge(entries, project) {
 }
 
 export function searchKnowledge(entries, query = '', kind = '') {
-  const normalize = (value) =>
-    value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('es');
-  const words = normalize(query).trim().split(/\s+/).filter(Boolean);
   return entries.filter(
     (entry) =>
-      (!kind || entry.kind === kind) &&
-      words.every((word) => normalize(`${entry.title}\n${entry.text}`).includes(word)),
+      (!kind || entry.kind === kind) && matchesSearch(query, `${entry.title}\n${entry.text}`),
   );
 }
 
