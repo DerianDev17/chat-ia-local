@@ -15,6 +15,7 @@ import { readDocument, buildDocumentContext, citedSources } from './documents.js
 import { buildKnowledgeContext, projectName } from './knowledge.js';
 import { createKnowledgeUI } from './knowledge-ui.js';
 import { createConversationImportUI } from './conversation-import-ui.js';
+import { reviewSources, sourceReviewText } from './source-review.js';
 
 export function createApp({
   runtime,
@@ -509,6 +510,14 @@ export function createApp({
       item.append(references);
     }
     if (message.role === 'assistant') {
+      const review = message.status !== 'generating' ? reviewSources(message) : null;
+      if (review) {
+        const warning = doc.createElement('p');
+        warning.className = 'source-review';
+        warning.dataset.kind = review.missing.length || review.uncited ? 'warning' : 'info';
+        warning.textContent = sourceReviewText(review);
+        item.append(warning);
+      }
       const actions = doc.createElement('div');
       actions.className = 'message-actions';
       if (message.content) {

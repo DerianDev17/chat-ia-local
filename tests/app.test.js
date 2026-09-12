@@ -982,6 +982,7 @@ test('document citations open only stored sources and survive reloading', async 
   await page.app.submit();
   assert.ok(page.$('.citation-button[data-source="1"]'));
   assert.equal(page.$('[data-source="999"]'), null);
+  assert.match(page.$('.source-review').textContent, /Referencias no disponibles: \[999\]/);
   assert.equal(page.$('.unverified-citation').textContent, '[999]');
   page.$('.citation-button').click();
   assert.equal(page.$('#source-text').textContent, 'La garantía dura dos años.');

@@ -107,6 +107,17 @@
   font-size: 11px;
   margin-top: 12px;
 }
+.source-review {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.source-review[data-kind='warning'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
 .source-list button {
   max-width: 100%;
   overflow-wrap: anywhere;
