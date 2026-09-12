@@ -21,7 +21,9 @@ Solo se generan controles de referencia para identificadores de fragmentos realm
 
 Las pruebas automatizadas de interfaz utilizan un motor simulado. La descarga completa y la inferencia WebGPU con la CSP deben verificarse en los navegadores objetivo. Si un proveedor cambia los dominios de descarga, revisa el bloqueo concreto antes de ampliar `connect-src`; no sustituyas la lista por un comodín general.
 
-El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensiones con permisos sobre la página o scripts del mismo origen. Los archivos de modelo y runtime externos siguen dependiendo de sus proveedores. No hay sincronización entre pestañas ni backend de cuentas.
+El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensiones con permisos sobre la página o scripts del mismo origen. Los archivos de modelo y runtime externos siguen dependiendo de sus proveedores. Hay avisos de cambios entre pestañas del mismo origen mediante BroadcastChannel; no hay sincronización entre dispositivos ni backend de cuentas.
+
+La importación de conversaciones admite únicamente el esquema JSON de versión 1, UTF-8 y hasta 16 MB, con un máximo de 2.000 mensajes y 64 KB por mensaje. Reconstruye una lista explícita de campos, rechaza roles ajenos a usuario/asistente y no reutiliza IDs importados. Los fragmentos de documentos se recalculan desde texto validado; las vistas previas usan texto inerte y las respuestas mantienen el saneamiento de Markdown. Los fragmentos de biblioteca importados no apuntan a entradas locales existentes.
 
 El borrado conserva marcadores mínimos (ID, tipo y fecha), sin mensajes, documentos ni títulos, para impedir que una generación tardía en otra pestaña restaure datos eliminados. Vaciar el historial también conserva estos marcadores. No se ofrece resolución completa de ediciones simultáneas; utiliza una pestaña por conversación.
 

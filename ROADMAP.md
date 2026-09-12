@@ -2,21 +2,15 @@
 
 Entregado: biblioteca local de documentos y notas por proyecto, recuerdos explícitos desde mensajes, edición y borrado, consulta entre chats con referencias, búsqueda por texto y tipo, copias completas de la biblioteca con restauración validada y migración del historial. Próximas ampliaciones: embeddings multilingües y propuestas de recuerdos revisables.
 
-Ya están implementadas la consulta de texto y PDF por páginas y la administración de modelos/caché. Las siguientes propuestas pendientes son importar copias de conversaciones y editar preguntas.
+Ya están implementadas la consulta de texto y PDF por páginas, la administración de modelos/caché y la importación de conversaciones. La siguiente propuesta pendiente es editar preguntas.
 
-## 1. Importar copias de seguridad — esfuerzo bajo/medio
+## Entregado: importar copias de conversaciones
 
 **Valor:** recuperar una conversación exportada o moverla a otro navegador.
 
-**Alcance:** importar el JSON exportado por Local, previsualizar el contenido, validar tamaño y esquema, asignar nuevos IDs y pedir confirmación antes de guardar. No sobrescribir conversaciones existentes por defecto.
+**Alcance implementado:** importar JSON de conversación de versión 1, previsualizar el contenido, validar tamaño y esquema, asignar nuevos IDs y confirmar antes de guardar. Cada importación crea una copia independiente. Se conservan documentos y referencias, se reconstruyen fragmentos y se permite reintentar un guardado fallido.
 
-**Commits sugeridos:**
-
-1. `feat: validate versioned conversation backups` — validación de esquema, límites y migraciones.
-2. `feat: preview and import local backups` — selector, vista previa, guardado con IDs nuevos.
-3. `test: cover malformed backups and document round trips` — JSON malicioso, duplicados y documentos con referencias.
-
-**Terminado cuando:** un JSON exportado se restaure conservando mensajes, documento y referencias; un archivo inválido no modifique el historial.
+**Límites:** 16 MB por archivo, 2.000 mensajes y 64 KB por mensaje; los documentos conservan sus límites de tamaño y páginas. La biblioteca se restaura por separado. Hay pruebas de JSON malicioso, cancelación, errores de guardado, IDs independientes y referencias de PDF.
 
 ## 2. Editar preguntas y crear versiones — esfuerzo medio
 

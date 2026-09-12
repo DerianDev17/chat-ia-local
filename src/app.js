@@ -12,6 +12,7 @@ import { renderMarkdown } from './markdown.js';
 import { readDocument, buildDocumentContext, citedSources } from './documents.js';
 import { buildKnowledgeContext, projectName } from './knowledge.js';
 import { createKnowledgeUI } from './knowledge-ui.js';
+import { createConversationImportUI } from './conversation-import-ui.js';
 
 export function createApp({
   runtime,
@@ -59,6 +60,24 @@ export function createApp({
   let draftTimer;
   let pendingDocument = null;
   let previewDocument = null;
+  const conversationImport = createConversationImportUI({
+    document: doc,
+    store,
+    locked: () => !state.initialized || state.busy || state.attaching,
+    setLocked: (locked) => {
+      state.attaching = locked;
+      updateControls();
+    },
+    notice: showNotice,
+    imported: (copy) => {
+      state.conversations.push(copy);
+      publishSync({ type: 'conversation-changed', id: copy.id, updatedAt: copy.updatedAt });
+      $('#search').value = '';
+      selectConversation(copy);
+      showNotice('Conversación importada como copia. Ya puedes consultarla y continuar.');
+      announce('Conversación importada.');
+    },
+  });
   const knowledgeUI = createKnowledgeUI({
     document: doc,
     store,
@@ -217,6 +236,7 @@ export function createApp({
   }
 
   function updateControls() {
+    $('#import-conversation').disabled = !state.initialized || state.busy || state.attaching;
     $('#open-knowledge').disabled = !state.initialized || state.busy || state.attaching;
     $('#chat-project').disabled = !state.initialized || state.busy || state.attaching;
     $('#use-knowledge').disabled = !state.initialized || state.busy || state.attaching;
@@ -1136,6 +1156,7 @@ export function createApp({
   }
 
   async function start() {
+    conversationImport.start();
     $('#open-knowledge').addEventListener('click', () => void knowledgeUI.open());
     const saveKnowledgePreferences = () => {
       if (!state.initialized || state.busy || state.attaching) return;

@@ -411,6 +411,99 @@ async function setup({
   };
 }
 
+async function previewConversation(page, json) {
+  Object.defineProperty(page.$('#conversation-backup-file'), 'files', {
+    configurable: true,
+    value: [
+      {
+        name: 'conversacion.json',
+        size: new TextEncoder().encode(json).length,
+        async arrayBuffer() {
+          return new TextEncoder().encode(json).buffer;
+        },
+      },
+    ],
+  });
+  page.$('#conversation-backup-file').dispatchEvent(new page.window.Event('change'));
+  await settleKnowledge(page);
+}
+
+test('conversation import previews inert text, cancels, confirms a new copy and survives reload', async () => {
+  const factory = new IDBFactory();
+  const page = await setup({ factory });
+  await page.app.loadModel();
+  page.$('#prompt').value = 'Conversación original';
+  await page.app.submit();
+  const original = structuredClone(page.app.state.current);
+  const backup = {
+    schemaVersion: 1,
+    ...structuredClone(original),
+    title: '<img src=x onerror=alert(1)>',
+  };
+  backup.messages[1].content = '<script>alert(1)</script> **Respuesta**';
+  const json = JSON.stringify(backup);
+  page.$('#prompt').value = 'Borrador sin enviar';
+  page.$('#prompt').dispatchEvent(new page.window.Event('input'));
+  page.runtime.ready = false;
+  await previewConversation(page, json);
+  assert.equal(page.$('#import-conversation-dialog').open, true);
+  assert.equal(page.$('#import-conversation-detail img'), null);
+  assert.equal(page.$('#import-conversation-preview script'), null);
+  assert.equal((await page.store.list()).length, 1);
+  page.$('#cancel-conversation-import').click();
+  assert.equal((await page.store.list()).length, 1);
+  assert.equal(page.app.state.current.id, original.id);
+  assert.equal(page.$('#import-conversation-preview').textContent, '');
+  await previewConversation(page, json);
+  page.$('#confirm-conversation-import').click();
+  page.$('#confirm-conversation-import').click();
+  await settleKnowledge(page);
+  const copyId = page.app.state.current.id;
+  assert.notEqual(copyId, original.id);
+  assert.equal((await page.store.list()).length, 2);
+  assert.deepEqual(await page.store.get(original.id), original);
+  assert.equal(page.$('#messages script'), null);
+  assert.equal(page.$('#chat-title img'), null);
+  page.app.selectConversation(page.app.state.conversations.find((item) => item.id === original.id));
+  assert.equal(page.$('#prompt').value, 'Borrador sin enviar');
+  page.close();
+  const reopened = await setup({ factory, supported: false });
+  assert.equal(reopened.app.state.conversations.length, 2);
+  assert.equal((await reopened.store.get(copyId)).title, backup.title);
+  reopened.close();
+});
+
+test('invalid conversation backups and failed saves preserve history and allow retry', async () => {
+  const page = await setup({ supported: false });
+  const originalId = page.app.state.current.id;
+  await previewConversation(page, '{');
+  assert.equal(page.$('#import-conversation-dialog').open, false);
+  assert.match(page.$('#notice').textContent, /JSON válido/);
+  assert.deepEqual(await page.store.list(), []);
+  const json = JSON.stringify({ schemaVersion: 1, ...page.app.state.current });
+  await previewConversation(page, json);
+  const save = page.store.save.bind(page.store);
+  for (const failure of [false, new Error('QuotaExceededError')]) {
+    page.store.save = async () => {
+      if (failure instanceof Error) throw failure;
+      return failure;
+    };
+    page.$('#confirm-conversation-import').click();
+    await settleKnowledge(page);
+    assert.equal(page.$('#import-conversation-dialog').open, true);
+    assert.match(page.$('#import-conversation-status').textContent, /No se pudo guardar/);
+    assert.equal(page.app.state.current.id, originalId);
+    assert.equal(page.app.state.conversations.length, 0);
+    assert.equal(page.$('#confirm-conversation-import').disabled, false);
+  }
+  page.store.save = save;
+  page.$('#confirm-conversation-import').click();
+  await settleKnowledge(page);
+  assert.equal((await page.store.list()).length, 1);
+  assert.equal(page.$('#import-conversation-dialog').open, false);
+  page.close();
+});
+
 for (const operation of ['delete', 'clear']) {
   test(`finishing generation after remote ${operation} does not restore the chat`, async () => {
     const factory = new IDBFactory();

@@ -33,6 +33,8 @@
         <button id="new-chat" class="new-chat">
           <span aria-hidden="true">＋</span> Nueva conversación <kbd>Alt N</kbd>
         </button>
+        <button id="import-conversation" class="new-chat" disabled>Importar conversación</button>
+        <input id="conversation-backup-file" type="file" accept=".json,application/json" hidden />
         <label class="search-box"
           ><span aria-hidden="true">⌕</span
           ><input
@@ -227,6 +229,23 @@
         </div>
       </section>
     </div>
+    <dialog id="import-conversation-dialog" aria-labelledby="import-conversation-title">
+      <div class="dialog-heading">
+        <h2 id="import-conversation-title">Importar conversación</h2>
+      </div>
+      <p>Se guardará como una copia nueva, conservando mensajes, documento y referencias.</p>
+      <p id="import-conversation-detail"></p>
+      <p>Vista previa de los primeros seis mensajes (hasta 600 caracteres por mensaje):</p>
+      <pre id="import-conversation-preview" class="document-preview" tabindex="0"></pre>
+      <p>La biblioteca se restaura por separado desde «Biblioteca y memoria».</p>
+      <p id="import-conversation-status" role="status" aria-live="polite"></p>
+      <div class="button-row">
+        <button id="cancel-conversation-import" class="text-button">Cancelar</button>
+        <button id="confirm-conversation-import" class="primary-button" disabled>
+          Guardar copia
+        </button>
+      </div>
+    </dialog>
     <dialog id="models-dialog" aria-labelledby="models-title">
       <div class="dialog-heading">
         <h2 id="models-title">Modelos y caché</h2>

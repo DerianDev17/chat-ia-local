@@ -25,6 +25,7 @@ No abras `index.html` directamente con `file://`: los módulos, el Worker y WebG
 - Respuestas en streaming, detener, volver a generar y recuperación tras errores.
 - Historial local persistente: buscar por título o contenido, abrir, renombrar y eliminar con confirmación.
 - Copia de respuestas y exportación de conversaciones a Markdown o JSON.
+- Importación de conversaciones JSON con vista previa, validación y guardado como copias independientes.
 - Markdown saneado con DOMPurify. El contenido del modelo no puede insertar scripts, imágenes de seguimiento ni marcos externos.
 - Aviso de fallos de almacenamiento y conservación de mensajes en memoria para poder exportarlos.
 - Recuperación de respuestas interrumpidas al recargar y guardado periódico durante la generación.
@@ -63,6 +64,14 @@ En **Contenido del proyecto**, busca por título o texto y filtra por documentos
 Para restaurarla en otro navegador, usa **Importar copia JSON**, revisa las entradas y pulsa **Confirmar importación**. Se valida el archivo (hasta 64 MB), se reconstruyen los fragmentos y se asignan IDs nuevos. Se omiten entradas del mismo tipo, proyecto y contenido (con las mismas páginas en PDF), sin sobrescribir las existentes. Si falla el guardado o se superan las 100 entradas, no se importa ninguna.
 
 Los recuerdos importados conservan el título y el rol de su origen como referencia, pero son independientes de los chats locales. Para eliminarlos usa **Olvidar** en la biblioteca. Un JSON exportado desde las opciones de una conversación tiene otro formato y no se importa desde este panel.
+
+## Importar una conversación
+
+Pulsa **Importar conversación** en el menú lateral y elige un JSON exportado desde las opciones de un chat (versión 1). Revisa el título, el documento y la vista previa de mensajes; pulsa **Guardar copia** para restaurarlo. Cancelar o seleccionar un archivo inválido no modifica el historial. No hace falta cargar el modelo.
+
+Se admiten archivos UTF-8 de hasta 16 MB, 2.000 mensajes y 64 KB por mensaje, con los límites habituales para documentos. Se conservan mensajes, estados, proyecto, texto del documento, páginas de PDF y referencias. Los fragmentos se reconstruyen a partir del texto validado y las respuestas que estaban generándose quedan interrumpidas. Cada importación crea IDs nuevos y puede repetirse sin sobrescribir conversaciones. Si el guardado falla, la vista previa permanece abierta para reintentarlo.
+
+Los fragmentos de biblioteca conservan su texto y el título del origen como referencias históricas; no restauran la biblioteca ni se vinculan a los recuerdos locales existentes. Para recuperar las entradas completas usa la importación de **Biblioteca y memoria**.
 
 ## Duplicar una conversación
 
