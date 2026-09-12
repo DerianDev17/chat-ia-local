@@ -711,6 +711,7 @@ export function createApp({
         question,
         conversation.document,
         conversation.documentPage || null,
+        { history },
       );
     if (!conversation.useKnowledge) return null;
     return buildKnowledgeContext(
@@ -742,6 +743,8 @@ export function createApp({
     reply.content = '';
     delete reply.finishReason;
     reply.documentMode = !!documentContext;
+    if (documentContext) reply.retrievalTopic = context.topic;
+    else delete reply.retrievalTopic;
     if (documentContext) reply.sources = structuredClone(context.sources);
     else delete reply.sources;
     renderConversation();
@@ -753,8 +756,9 @@ export function createApp({
     let finishReason;
     try {
       if (documentContext && !context.sources.length) {
-        reply.content =
-          context.kind === 'knowledge'
+        reply.content = context.clarification
+          ? '¿A qué tema te refieres? Nombra el asunto del documento o de la biblioteca para poder buscarlo.'
+          : context.kind === 'knowledge'
             ? 'No encontré información relacionada en la biblioteca de este proyecto. Prueba con palabras del contenido guardado o desactiva «Usar biblioteca y memoria» para usar el chat general.'
             : 'No encontré fragmentos relacionados con esta pregunta. Prueba con palabras del documento o desactiva «Responder con este documento» para usar el chat general.';
         reply.status = 'complete';

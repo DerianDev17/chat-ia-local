@@ -112,6 +112,8 @@ export function parseConversationBackup(json) {
     );
     restored.createdAt = integer(message.createdAt);
     restored.documentMode = flag(message.documentMode);
+    if (message.retrievalTopic !== undefined)
+      restored.retrievalTopic = text(message.retrievalTopic, 64 * 1024, true);
     if (message.model !== undefined) restored.model = text(message.model, 256);
     if (message.finishReason !== undefined) restored.finishReason = text(message.finishReason, 64);
     if (message.documentPage != null) restored.documentPage = integer(message.documentPage, 100, 1);

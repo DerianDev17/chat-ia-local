@@ -64,7 +64,13 @@ export function buildKnowledgeContext(question, entries, project, history = []) 
       originals.set(id, { entry, chunk });
     }
   }
-  const context = buildDocumentContext(question, { chunks });
+  const context = buildDocumentContext(question, { chunks }, null, {
+    history,
+    isCurrentSource: (source) =>
+      selected.some(
+        (entry) => entry.id === source.knowledgeId && entry.updatedAt === source.knowledgeUpdatedAt,
+      ),
+  });
   context.kind = 'knowledge';
   context.total = chunks.length;
   context.sources = context.sources.map((source) => {
