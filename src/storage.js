@@ -83,9 +83,10 @@ export class ConversationStore {
         pending -= 1;
         if (pending) return;
         const currentRecord = current.result;
-        const blockedByDelete =
-          isTombstone(currentRecord) && currentRecord.updatedAt >= snapshot.updatedAt;
-        const blockedByClear = cleared.result?.updatedAt >= snapshot.updatedAt;
+        // Deleted IDs are never reusable, even when a stale tab finishes a
+        // generation later and gives its snapshot a newer timestamp.
+        const blockedByDelete = isTombstone(currentRecord);
+        const blockedByClear = cleared.result?.updatedAt > snapshot.updatedAt;
         const blockedByNewerVersion =
           currentRecord &&
           !isTombstone(currentRecord) &&
@@ -137,7 +138,12 @@ export class ConversationStore {
         const records = store.getAll();
         const result = { cleared: false };
         records.onsuccess = () => {
-          for (const record of records.result) store.delete(record.id);
+          // Keep only IDs and deletion markers, never messages or documents.
+          // Existing markers must survive subsequent clears as well.
+          for (const record of records.result) {
+            if (record.id !== CLEAR_TOMBSTONE_ID)
+              store.put({ id: record.id, __tombstone: 'conversation', updatedAt: Date.now() });
+          }
           store.put({
             id: CLEAR_TOMBSTONE_ID,
             __tombstone: 'clear',

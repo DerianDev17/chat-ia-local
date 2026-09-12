@@ -411,6 +411,46 @@ async function setup({
   };
 }
 
+for (const operation of ['delete', 'clear']) {
+  test(`finishing generation after remote ${operation} does not restore the chat`, async () => {
+    const factory = new IDBFactory();
+    let release;
+    let started;
+    const ready = new Promise((resolve) => {
+      started = resolve;
+    });
+    const finish = new Promise((resolve) => {
+      release = resolve;
+    });
+    const page = await setup({
+      factory,
+      runtime: {
+        ready: true,
+        async *generate() {
+          started();
+          await finish;
+          yield { choices: [{ delta: { content: 'Respuesta tardía' } }] };
+        },
+      },
+    });
+    const other = await new ConversationStore(factory).open();
+    page.$('#prompt').value = 'Pregunta';
+    const generation = page.app.submit();
+    await ready;
+    await page.store.queue;
+    const id = page.app.state.current.id;
+    if (operation === 'delete') await other.delete(id);
+    else await other.clear();
+    release();
+    await generation;
+    assert.deepEqual(await other.list(), []);
+    assert.equal(page.app.state.conversations.length, 0);
+    assert.notEqual(page.app.state.current.id, id);
+    other.close();
+    page.close();
+  });
+}
+
 test('loads, streams sanitized output, persists history, renames and searches it', async () => {
   const factory = new IDBFactory();
   const page = await setup({ factory });

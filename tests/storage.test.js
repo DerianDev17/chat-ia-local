@@ -61,3 +61,29 @@ test('a clear tombstone blocks a stale tab from restoring the history', async ()
   assert.deepEqual(await store.list(), []);
   store.close();
 });
+
+for (const operation of ['delete', 'clear']) {
+  test(`${operation} prevents a delayed generation from restoring deleted data`, async () => {
+    const factory = new IDBFactory();
+    const first = await new ConversationStore(factory).open();
+    const second = await new ConversationStore(factory).open();
+    try {
+      const conversation = newConversation();
+      await first.save(conversation);
+      if (operation === 'delete') await second.delete(conversation.id);
+      else await second.clear();
+      // Generation finishes after the deletion and advances its timestamp.
+      conversation.updatedAt = Date.now() + 1000;
+      conversation.messages.push(newMessage('assistant', 'Respuesta tardía'));
+      assert.equal(await first.save(conversation), false);
+      assert.deepEqual(await second.list(), []);
+      // Clearing again must retain the protection for previously deleted IDs.
+      await second.clear();
+      assert.equal(await first.save(conversation), false);
+      assert.equal(await first.save(newConversation()), true);
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
+}

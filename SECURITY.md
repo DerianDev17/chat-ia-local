@@ -23,6 +23,8 @@ Las pruebas automatizadas de interfaz utilizan un motor simulado. La descarga co
 
 El almacenamiento local no tiene cifrado propio ni aislamiento frente a extensiones con permisos sobre la página o scripts del mismo origen. Los archivos de modelo y runtime externos siguen dependiendo de sus proveedores. No hay sincronización entre pestañas ni backend de cuentas.
 
+El borrado conserva marcadores mínimos (ID, tipo y fecha), sin mensajes, documentos ni títulos, para impedir que una generación tardía en otra pestaña restaure datos eliminados. Vaciar el historial también conserva estos marcadores. No se ofrece resolución completa de ediciones simultáneas; utiliza una pestaña por conversación.
+
 ## Comprobar después de un cambio
 
 ```sh
