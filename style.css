@@ -63,6 +63,33 @@
     Consolas,
     monospace;
 }
+#edit-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  max-height: 35dvh;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+}
+.branch-info {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.branch-info p {
+  margin: 0 0 8px;
+}
+#edit-context {
+  overflow-wrap: anywhere;
+}
 #document-dialog {
   width: min(680px, calc(100% - 32px));
 }

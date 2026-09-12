@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newConversation, newMessage } from '../src/conversations.js';
+import { branchConversation, newConversation, newMessage } from '../src/conversations.js';
 import { documentFromPages, buildDocumentContext } from '../src/documents.js';
 import {
   parseConversationBackup,
@@ -15,6 +15,19 @@ function backup() {
     messages: [newMessage('user', 'Hola'), newMessage('assistant', 'Respuesta')],
   };
 }
+test('exported versions retain origin descriptions without linking to existing local chats', () => {
+  const original = backup();
+  const version = branchConversation(original, original.messages[0].id, 'Otra pregunta');
+  const imported = parse({ schemaVersion: 1, ...version });
+  assert.equal(imported.branch.parentTitle, original.title);
+  assert.equal(imported.branch.context, 'Chat general');
+  assert.notEqual(imported.branch.parentId, original.id);
+  assert.notEqual(imported.branch.messageId, version.branch.messageId);
+  assert.equal(imported.messages[0].content, 'Otra pregunta');
+  assert.throws(() =>
+    parse({ schemaVersion: 1, ...version, branch: { ...version.branch, context: {} } }),
+  );
+});
 const parse = (value) => parseConversationBackup(JSON.stringify(value));
 
 test('imports current JSON exports with new identities and recovers interrupted replies', () => {

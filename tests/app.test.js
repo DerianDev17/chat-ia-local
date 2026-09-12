@@ -428,6 +428,142 @@ async function previewConversation(page, json) {
   await settleKnowledge(page);
 }
 
+async function settleVersion(page) {
+  for (let i = 0; i < 500 && (page.app.state.attaching || page.app.state.busy); i++)
+    await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.app.state.attaching || page.app.state.busy, false);
+}
+
+test('editing an earlier question generates a saved version and preserves original turns and draft', async () => {
+  const factory = new IDBFactory();
+  const contexts = [];
+  const page = await setup({
+    factory,
+    runtime: {
+      ready: true,
+      async *generate(messages) {
+        contexts.push(structuredClone(messages));
+        yield { choices: [{ delta: { content: 'Respuesta de prueba' } }] };
+      },
+    },
+  });
+  for (const question of ['Primera pregunta', 'Segunda pregunta', 'Tercera pregunta']) {
+    page.$('#prompt').value = question;
+    await page.app.submit();
+  }
+  const original = structuredClone(page.app.state.current);
+  page.$('#prompt').value = 'Mi borrador';
+  page.$('#prompt').dispatchEvent(new page.window.Event('input'));
+  page.$(`[data-edit="${original.messages[2].id}"]`).click();
+  assert.equal(page.$('#edit-dialog').open, true);
+  assert.equal(page.$('#edit-prompt').value, 'Segunda pregunta');
+  page.$('#edit-prompt').value = 'Pregunta corregida';
+  page.$('#edit-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  await settleVersion(page);
+  const version = structuredClone(page.app.state.current);
+  assert.notEqual(version.id, original.id);
+  assert.equal(version.messages.length, 4);
+  assert.deepEqual(
+    contexts
+      .at(-1)
+      .slice(1)
+      .map((message) => message.content),
+    ['Primera pregunta', 'Respuesta de prueba', 'Pregunta corregida'],
+  );
+  assert.equal(version.messages.at(-1).status, 'complete');
+  assert.deepEqual(await page.store.get(original.id), original);
+  assert.match(page.$('#branch-description').textContent, /Pregunta 2.*Chat general/);
+  page.$('#open-parent').click();
+  assert.equal(page.app.state.current.id, original.id);
+  assert.equal(page.$('#prompt').value, 'Mi borrador');
+  page.close();
+  const reopened = await setup({ factory, supported: false });
+  reopened.app.selectConversation(
+    reopened.app.state.conversations.find((entry) => entry.id === version.id),
+  );
+  assert.equal(reopened.$('#open-parent').hidden, false);
+  await reopened.store.delete(original.id);
+  assert.deepEqual((await reopened.store.get(version.id)).messages, version.messages);
+  reopened.close();
+});
+
+test('cancelled, invalid and failed edits keep the original; a saved version works without a loaded model', async () => {
+  const page = await setup({ supported: false });
+  const { newMessage } = await import('../src/conversations.js');
+  page.app.state.current.messages.push(
+    newMessage('user', 'Pregunta inicial'),
+    newMessage('assistant', 'Respuesta'),
+  );
+  page.app.state.conversations.push(page.app.state.current);
+  await page.app.save();
+  page.app.selectConversation(page.app.state.current);
+  const original = structuredClone(page.app.state.current);
+  page.$('[data-edit]').click();
+  page.$('#cancel-edit').click();
+  assert.equal(page.$('#edit-dialog').open, false);
+  assert.equal(page.app.state.conversations.length, 1);
+  page.$('[data-edit]').click();
+  page.$('#edit-prompt').value = '😀'.repeat(800);
+  page.$('#edit-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  assert.match(page.$('#edit-status').textContent, /demasiado largo/);
+  const save = page.store.save.bind(page.store);
+  page.$('#edit-prompt').value = 'Pregunta corregida';
+  for (const failure of [false, new Error('Sin espacio')]) {
+    page.store.save = async () => {
+      if (failure instanceof Error) throw failure;
+      return failure;
+    };
+    page.$('#edit-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+    await settleVersion(page);
+    assert.equal(page.$('#edit-dialog').open, true);
+    assert.equal(page.$('#edit-prompt').value, 'Pregunta corregida');
+    assert.equal(page.app.state.conversations.length, 1);
+    assert.match(page.$('#edit-status').textContent, /No se pudo guardar/);
+  }
+  page.store.save = save;
+  page.$('#edit-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  await settleVersion(page);
+  assert.equal(page.$('#edit-dialog').open, false);
+  assert.equal(page.app.state.current.messages[0].content, 'Pregunta corregida');
+  assert.equal(page.app.state.current.messages[1].status, 'interrupted');
+  assert.deepEqual(await page.store.get(original.id), original);
+  page.close();
+});
+
+test('a generation failure retains the saved version and permits retry without altering its parent', async () => {
+  let fail = false;
+  let page;
+  page = await setup({
+    runtime: {
+      ready: true,
+      async *generate() {
+        if (fail) {
+          assert.equal(
+            (await page.store.get(page.app.state.current.id)).messages[0].content,
+            'Nueva pregunta',
+          );
+          throw new Error('Synthetic failure');
+        }
+        yield { choices: [{ delta: { content: 'Respuesta' } }] };
+      },
+    },
+  });
+  page.$('#prompt').value = 'Original';
+  await page.app.submit();
+  const original = structuredClone(page.app.state.current);
+  fail = true;
+  page.$('[data-edit]').click();
+  page.$('#edit-prompt').value = 'Nueva pregunta';
+  page.$('#edit-form').dispatchEvent(new page.window.Event('submit', { cancelable: true }));
+  await settleVersion(page);
+  assert.equal(page.app.state.current.messages[1].status, 'error');
+  fail = false;
+  await page.app.retry(page.app.state.current.messages[1].id);
+  assert.equal(page.app.state.current.messages[1].status, 'complete');
+  assert.deepEqual(await page.store.get(original.id), original);
+  page.close();
+});
+
 test('conversation import previews inert text, cancels, confirms a new copy and survives reload', async () => {
   const factory = new IDBFactory();
   const page = await setup({ factory });

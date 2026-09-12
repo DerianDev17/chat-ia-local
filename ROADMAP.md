@@ -2,7 +2,7 @@
 
 Entregado: biblioteca local de documentos y notas por proyecto, recuerdos explícitos desde mensajes, edición y borrado, consulta entre chats con referencias, búsqueda por texto y tipo, copias completas de la biblioteca con restauración validada y migración del historial. Próximas ampliaciones: embeddings multilingües y propuestas de recuerdos revisables.
 
-Ya están implementadas la consulta de texto y PDF por páginas, la administración de modelos/caché y la importación de conversaciones. La siguiente propuesta pendiente es editar preguntas.
+Ya están implementadas la consulta de texto y PDF por páginas, la administración de modelos/caché, la importación de conversaciones y la edición de preguntas en versiones independientes.
 
 ## Entregado: importar copias de conversaciones
 
@@ -12,19 +12,13 @@ Ya están implementadas la consulta de texto y PDF por páginas, la administraci
 
 **Límites:** 16 MB por archivo, 2.000 mensajes y 64 KB por mensaje; los documentos conservan sus límites de tamaño y páginas. La biblioteca se restaura por separado. Hay pruebas de JSON malicioso, cancelación, errores de guardado, IDs independientes y referencias de PDF.
 
-## 2. Editar preguntas y crear versiones — esfuerzo medio
+## Entregado: editar preguntas y crear versiones
 
 **Valor:** corregir una pregunta y comparar respuestas sin perder lo anterior.
 
-**Alcance:** editar un mensaje del usuario crea una nueva rama de conversación, conservando la original y el documento asociado. Seleccionar una versión muestra qué contexto se utilizó.
+**Alcance implementado:** editar una pregunta crea una versión con los intercambios anteriores y la pregunta corregida, conservando la original. Copia el documento y las preferencias actuales, muestra la configuración utilizada al crear y permite volver al chat de origen. Guarda antes de generar y permite reintentar sin perder la edición.
 
-**Commits sugeridos:**
-
-1. `feat: add conversation branch model` — parentesco y copia de contexto anterior al mensaje editado.
-2. `feat: edit prompts and switch conversation versions` — editor, navegación y generación.
-3. `test: preserve original messages across branches` — persistencia, documentos y errores de inferencia.
-
-**Terminado cuando:** editar no destruya la conversación original y cada versión pueda exportarse y eliminarse por separado.
+**Verificación:** cada versión puede exportarse y eliminarse por separado. Las pruebas cubren conservación de la original, recarga, documentos y referencias independientes, errores de guardado, fallos de inferencia y restauración JSON del origen descriptivo.
 
 ## Entregadas: modelos y PDF
 

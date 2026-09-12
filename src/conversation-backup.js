@@ -82,6 +82,16 @@ export function parseConversationBackup(json) {
     if (!ids.has(id)) ids.set(id, crypto.randomUUID());
     return ids.get(id);
   };
+  if (backup.branch !== undefined) {
+    if (!backup.branch || typeof backup.branch !== 'object') invalid();
+    copy.branch = {
+      parentId: remap(backup.branch.parentId),
+      parentTitle: text(backup.branch.parentTitle, 720),
+      messageId: remap(backup.branch.messageId),
+      messageIndex: integer(backup.branch.messageIndex, 1000000),
+      context: text(backup.branch.context, 1200),
+    };
+  }
   if (backup.document !== undefined) {
     copy.document = restoreDocument(backup.document);
     ids.set(text(backup.document.id, 256), copy.document.id);

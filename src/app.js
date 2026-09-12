@@ -1,6 +1,8 @@
 import { MODELS, getModel, modelCache } from './models.js';
 import {
   buildContext,
+  branchConversation,
+  contextDescription,
   duplicateConversation,
   exportMarkdown,
   newConversation,
@@ -60,6 +62,8 @@ export function createApp({
   let draftTimer;
   let pendingDocument = null;
   let previewDocument = null;
+  let pendingEdit = null;
+  let savingEdit = false;
   const conversationImport = createConversationImportUI({
     document: doc,
     store,
@@ -243,6 +247,10 @@ export function createApp({
     doc.querySelectorAll('[data-remember]').forEach((button) => {
       button.disabled = state.busy || state.attaching;
     });
+    doc.querySelectorAll('[data-edit]').forEach((button) => {
+      button.disabled = state.busy || state.loading || state.attaching || state.cacheBusy;
+    });
+    $('#open-parent').disabled = state.busy || state.attaching;
     const locked = state.busy || state.loading || state.attaching || state.cacheBusy;
     $('#manage-models').disabled = locked;
     $('#model-select').disabled = locked;
@@ -470,6 +478,13 @@ export function createApp({
     content.className = 'message-content';
     fillContent(content, message);
     item.append(header, content);
+    if (message.role === 'user') {
+      const edit = doc.createElement('button');
+      edit.className = 'text-button';
+      edit.textContent = 'Editar en una versión';
+      edit.dataset.edit = message.id;
+      item.append(edit);
+    }
     if (message.content && message.status === 'complete') {
       const remember = doc.createElement('button');
       remember.className = 'text-button';
@@ -535,6 +550,12 @@ export function createApp({
     $('#chat-project').value = projectName(state.current?.project);
     $('#use-knowledge').checked = state.current?.useKnowledge === true;
     $('#chat-title').textContent = state.current?.title || 'Nueva conversación';
+    const branch = state.current?.branch;
+    $('#branch-info').hidden = !branch;
+    $('#branch-description').textContent = branch
+      ? `Versión de «${branch.parentTitle}» · Pregunta ${Math.floor(branch.messageIndex / 2) + 1}. Contexto al crear: ${branch.context}.`
+      : '';
+    $('#open-parent').hidden = !state.conversations.some((entry) => entry.id === branch?.parentId);
     const messages = state.current?.messages || [];
     $('#welcome').hidden = messages.length > 0;
     $('#messages').hidden = !messages.length;
@@ -952,6 +973,76 @@ export function createApp({
     }
   }
 
+  function openEdit(messageId) {
+    if (!state.initialized || state.busy || state.loading || state.attaching || state.cacheBusy)
+      return;
+    const message = state.current.messages.find((entry) => entry.id === messageId);
+    if (message?.role !== 'user') return;
+    pendingEdit = { conversation: state.current, updatedAt: state.current.updatedAt, messageId };
+    $('#edit-prompt').value = message.content;
+    $('#edit-context').textContent =
+      `Se usará la configuración actual: ${contextDescription(state.current)}.`;
+    $('#edit-status').textContent = '';
+    $('#edit-dialog').showModal();
+    $('#edit-prompt').focus();
+  }
+
+  async function acceptEdit() {
+    if (
+      !pendingEdit ||
+      savingEdit ||
+      state.busy ||
+      state.loading ||
+      state.attaching ||
+      state.cacheBusy
+    )
+      return;
+    const { conversation, updatedAt, messageId } = pendingEdit;
+    if (state.current !== conversation || conversation.updatedAt !== updatedAt) {
+      $('#edit-status').textContent =
+        'La conversación cambió. Cierra este editor y vuelve a abrir la pregunta.';
+      return;
+    }
+    let copy;
+    try {
+      copy = branchConversation(conversation, messageId, $('#edit-prompt').value);
+    } catch (error) {
+      $('#edit-status').textContent = error.message;
+      return;
+    }
+    savingEdit = true;
+    state.attaching = true;
+    $('#create-version').disabled = true;
+    $('#cancel-edit').disabled = true;
+    $('#edit-prompt').disabled = true;
+    updateControls();
+    let saved = false;
+    try {
+      if ((await store.save(copy)) === false) throw new Error('No se pudo guardar la versión.');
+      saved = true;
+      state.conversations.push(copy);
+      publishSync({ type: 'conversation-changed', id: copy.id, updatedAt: copy.updatedAt });
+      $('#edit-dialog').close();
+      state.attaching = false;
+      $('#search').value = '';
+      selectConversation(copy);
+      announce('Nueva versión guardada.');
+    } catch {
+      $('#edit-status').textContent =
+        'No se pudo guardar la versión. Tu edición se conserva; vuelve a intentarlo.';
+    } finally {
+      savingEdit = false;
+      state.attaching = false;
+      $('#create-version').disabled = false;
+      $('#cancel-edit').disabled = false;
+      $('#edit-prompt').disabled = false;
+      updateControls();
+    }
+    if (!saved) return;
+    if (runtime.ready) await retry(copy.messages.at(-1).id);
+    else showNotice('Versión guardada. Pulsa Reintentar para cargar el modelo y responder.');
+  }
+
   function download(format) {
     const conversation = state.current;
     const text =
@@ -1157,6 +1248,27 @@ export function createApp({
 
   async function start() {
     conversationImport.start();
+    $('#edit-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      void acceptEdit();
+    });
+    $('#cancel-edit').addEventListener('click', () => {
+      if (!savingEdit) $('#edit-dialog').close();
+    });
+    $('#edit-dialog').addEventListener('cancel', (event) => {
+      if (savingEdit) event.preventDefault();
+    });
+    $('#edit-dialog').addEventListener('close', () => {
+      pendingEdit = null;
+      $('#edit-prompt').value = '';
+      $('#edit-status').textContent = '';
+    });
+    $('#open-parent').addEventListener('click', () => {
+      const parent = state.conversations.find(
+        (entry) => entry.id === state.current?.branch?.parentId,
+      );
+      if (parent) selectConversation(parent);
+    });
     $('#open-knowledge').addEventListener('click', () => void knowledgeUI.open());
     const saveKnowledgePreferences = () => {
       if (!state.initialized || state.busy || state.attaching) return;
@@ -1280,6 +1392,8 @@ export function createApp({
       }),
     );
     $('#messages').addEventListener('click', (event) => {
+      const edit = event.target.closest('[data-edit]');
+      if (edit) openEdit(edit.dataset.edit);
       const remember = event.target.closest('[data-remember]');
       if (remember && !state.busy && !state.attaching) {
         const message = state.current.messages.find(

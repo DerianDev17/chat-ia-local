@@ -104,6 +104,15 @@
         </header>
         <main id="chat-scroll" tabindex="-1">
           <div class="chat-column">
+            <section
+              id="branch-info"
+              class="branch-info"
+              aria-label="Origen de esta versión"
+              hidden
+            >
+              <p id="branch-description"></p>
+              <button id="open-parent" class="text-button" hidden>Ver conversación original</button>
+            </section>
             <section id="welcome" class="welcome">
               <div class="welcome-kicker">
                 <span class="kicker-line" aria-hidden="true"></span
@@ -229,6 +238,33 @@
         </div>
       </section>
     </div>
+    <dialog id="edit-dialog" aria-labelledby="edit-title">
+      <form id="edit-form">
+        <div class="dialog-heading"><h2 id="edit-title">Editar pregunta</h2></div>
+        <p>
+          Se creará una versión con los mensajes anteriores y tu pregunta editada. La conversación
+          original se conserva completa.
+        </p>
+        <p id="edit-context"></p>
+        <label for="edit-prompt">Tu pregunta</label>
+        <textarea
+          id="edit-prompt"
+          rows="5"
+          maxlength="12000"
+          required
+          aria-describedby="edit-context edit-status"
+        ></textarea>
+        <p>
+          Si el modelo está cargado, responderá al guardar la versión. También puedes cargarlo
+          después con Reintentar.
+        </p>
+        <p id="edit-status" role="status" aria-live="polite"></p>
+        <div class="button-row">
+          <button id="cancel-edit" type="button" class="text-button">Cancelar</button>
+          <button id="create-version" type="submit" class="primary-button">Crear versión</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="import-conversation-dialog" aria-labelledby="import-conversation-title">
       <div class="dialog-heading">
         <h2 id="import-conversation-title">Importar conversación</h2>

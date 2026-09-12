@@ -79,6 +79,14 @@ Abre **Opciones de conversación (•••)** y pulsa **Duplicar conversación*
 
 La copia se abre después de guardarse en el navegador. No requiere cargar el modelo y no está disponible mientras se genera una respuesta o se adjunta un documento.
 
+## Editar preguntas y crear versiones
+
+Pulsa **Editar en una versión** bajo cualquier pregunta, corrige el texto y pulsa **Crear versión**. Se conserva la conversación original y se guarda una copia con los intercambios anteriores a esa pregunta y la nueva pregunta. Las respuestas y preguntas posteriores permanecen en la original.
+
+La versión copia el documento adjunto y usa la configuración actual de documento, página o biblioteca indicada en el editor. Si el modelo está cargado, genera la respuesta después de guardar; si no, puedes usar **Reintentar** más tarde. Un error de almacenamiento mantiene abierta la edición; un error de inferencia conserva la versión para reintentarlo.
+
+Cada versión muestra su origen y la configuración al crearla. **Ver conversación original** vuelve al chat de origen mientras exista; el historial permite cambiar entre versiones. Puedes exportar o eliminar cada una por separado. Exportar a JSON y restaurar conserva la descripción del origen, sin enlazarla a chats locales existentes.
+
 ## PDF por páginas
 
 La vista previa permite recorrer el texto de cada página. En el documento adjunto, **Consultar** permite elegir todas las páginas o una concreta; la selección se conserva al recargar. Las fuentes muestran su página original y permiten desplegar el texto completo de esa página. Las páginas sin texto conservan su número.

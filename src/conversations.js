@@ -48,6 +48,37 @@ export function validatePrompt(text) {
   return null;
 }
 
+export function contextDescription(conversation) {
+  if (conversation.document && conversation.useDocument !== false)
+    return `Documento: ${conversation.document.name} · ${conversation.documentPage ? `Página ${conversation.documentPage}` : 'Todas las páginas'}`;
+  if (conversation.useKnowledge) return `Biblioteca: ${conversation.project || 'General'}`;
+  return 'Chat general';
+}
+
+export function branchConversation(conversation, messageId, content) {
+  const error = validatePrompt(content);
+  if (error) throw new Error(error);
+  const index = conversation.messages.findIndex((message) => message.id === messageId);
+  if (index < 0 || conversation.messages[index].role !== 'user')
+    throw new Error('Selecciona una pregunta del usuario para crear una versión.');
+  const copy = duplicateConversation({
+    ...conversation,
+    messages: conversation.messages.slice(0, index),
+  });
+  copy.title = `${conversation.title.slice(0, 105)} (versión)`;
+  copy.branch = {
+    parentId: conversation.id,
+    parentTitle: conversation.title,
+    messageId,
+    messageIndex: index,
+    context: contextDescription(conversation),
+  };
+  copy.messages.push(newMessage('user', content.trim()));
+  // Save the edited question before inference, including when no model is loaded.
+  copy.messages.push(newMessage('assistant', '', 'interrupted'));
+  return copy;
+}
+
 export function buildContext(messages) {
   // Keep only complete user/assistant turns. Failed and partial replies remain in
   // the visible history, but must not become factual context for the next turn.
@@ -97,6 +128,9 @@ export function recoverConversation(conversation) {
 export function exportMarkdown(conversation) {
   return (
     `# ${conversation.title}\n\nModelo: ${conversation.model}\n\n` +
+    (conversation.branch
+      ? `Versión de: ${conversation.branch.parentTitle}\n\nContexto al crear: ${conversation.branch.context}\n\n`
+      : '') +
     conversation.messages
       .map((message) => {
         const status =

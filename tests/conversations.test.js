@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildContext,
+  branchConversation,
   duplicateConversation,
   exportMarkdown,
   newConversation,
@@ -10,6 +11,45 @@ import {
   validatePrompt,
   INPUT_BUDGET,
 } from '../src/conversations.js';
+
+test('editing a question branches only preceding turns with independent documents and references', () => {
+  const original = newConversation();
+  original.document = { id: 'doc', name: 'Guía.pdf', pages: [{ page: 1, text: 'Texto' }] };
+  original.documentPage = 1;
+  original.messages = [
+    newMessage('user', 'Primera'),
+    newMessage('assistant', 'Texto [1]'),
+    newMessage('user', 'Segunda'),
+    newMessage('assistant', 'Anterior'),
+    newMessage('user', 'Tercera'),
+    newMessage('assistant', 'Posterior'),
+  ];
+  original.messages[1].sources = [{ id: 1, documentId: 'doc', name: 'Guía.pdf', text: 'Texto' }];
+  const before = structuredClone(original);
+  const copy = branchConversation(original, original.messages[2].id, '  Nueva pregunta  ');
+  assert.deepEqual(
+    copy.messages.map((message) => message.content),
+    ['Primera', 'Texto [1]', 'Nueva pregunta', ''],
+  );
+  assert.equal(copy.messages.at(-1).status, 'interrupted');
+  assert.notEqual(copy.id, original.id);
+  assert.notEqual(copy.document.id, original.document.id);
+  assert.equal(copy.messages[1].sources[0].documentId, copy.document.id);
+  assert.equal(copy.documentPage, 1);
+  assert.equal(copy.branch.parentId, original.id);
+  assert.equal(copy.branch.messageIndex, 2);
+  assert.match(copy.branch.context, /Guía.pdf · Página 1/);
+  assert.match(exportMarkdown(copy), /Versión de:/);
+  copy.document.pages[0].text = 'Cambio';
+  assert.deepEqual(original, before);
+  for (const [id, text] of [
+    [original.messages[1].id, 'Pregunta'],
+    ['missing', 'Pregunta'],
+    [original.messages[0].id, ' '],
+    [original.messages[0].id, '😀'.repeat(800)],
+  ])
+    assert.throws(() => branchConversation(original, id, text));
+});
 
 test('duplicates independent messages and PDF sources with fresh IDs', () => {
   const original = newConversation();
