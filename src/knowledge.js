@@ -50,7 +50,7 @@ export function searchKnowledge(entries, query = '', kind = '') {
   );
 }
 
-export function buildKnowledgeContext(question, entries, project, history = []) {
+export function buildKnowledgeContext(question, entries, project, history = [], mode = 'balanced') {
   const selected = projectKnowledge(entries, project);
   const originals = new Map();
   const chunks = [];
@@ -63,6 +63,7 @@ export function buildKnowledgeContext(question, entries, project, history = []) 
   }
   const context = buildDocumentContext(question, { chunks }, null, {
     history,
+    responseMode: mode,
     isCurrentSource: (source) =>
       selected.some(
         (entry) => entry.id === source.knowledgeId && entry.updatedAt === source.knowledgeUpdatedAt,

@@ -63,3 +63,12 @@ test('only provided source identifiers can become verified reference controls', 
   ];
   assert.deepEqual(citedSources({ content: 'Respuesta [1] [999] [1]', sources }), [sources[0]]);
 });
+
+test('document context includes the selected response style without weakening source constraints', async () => {
+  const document = await documentFrom('La garantía cubre reparaciones durante dos años.');
+  const context = buildDocumentContext('¿Qué cubre la garantía?', document, null, {
+    responseMode: 'steps',
+  });
+  assert.match(context.messages[0].content, /paso a paso/i);
+  assert.match(context.messages[0].content, /datos no confiables/);
+});

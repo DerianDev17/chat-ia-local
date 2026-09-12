@@ -7,6 +7,8 @@ import {
   exportMarkdown,
   newConversation,
   newMessage,
+  responseMode,
+  RESPONSE_MODES,
   recoverConversation,
   validatePrompt,
 } from './conversations.js';
@@ -245,6 +247,7 @@ export function createApp({
     $('#open-knowledge').disabled = !state.initialized || state.busy || state.attaching;
     $('#chat-project').disabled = !state.initialized || state.busy || state.attaching;
     $('#use-knowledge').disabled = !state.initialized || state.busy || state.attaching;
+    $('#response-mode').disabled = !state.initialized || state.busy || state.attaching;
     doc.querySelectorAll('[data-remember]').forEach((button) => {
       button.disabled = state.busy || state.attaching;
     });
@@ -558,6 +561,7 @@ export function createApp({
   function renderConversation() {
     $('#chat-project').value = projectName(state.current?.project);
     $('#use-knowledge').checked = state.current?.useKnowledge === true;
+    $('#response-mode').value = responseMode(state.current?.responseMode);
     $('#chat-title').textContent = state.current?.title || 'Nueva conversación';
     const branch = state.current?.branch;
     $('#branch-info').hidden = !branch;
@@ -720,7 +724,7 @@ export function createApp({
         question,
         conversation.document,
         conversation.documentPage || null,
-        { history },
+        { history, responseMode: conversation.responseMode },
       );
     if (!conversation.useKnowledge) return null;
     return buildKnowledgeContext(
@@ -728,12 +732,14 @@ export function createApp({
       await store.listKnowledge(),
       conversation.project,
       history,
+      conversation.responseMode,
     );
   }
 
   async function generate(reply, documentContext = null) {
     const conversation = state.current;
-    const context = documentContext || buildContext(conversation.messages);
+    const context =
+      documentContext || buildContext(conversation.messages, conversation.responseMode);
     state.busy = true;
     state.stopping = false;
     showNotice(
@@ -1292,8 +1298,19 @@ export function createApp({
       renderHistory();
       void save();
     };
+    const saveResponseMode = () => {
+      if (!state.initialized || state.busy || state.attaching) return;
+      state.current.responseMode = responseMode($('#response-mode').value);
+      state.current.updatedAt = Math.max(Date.now(), state.current.updatedAt + 1);
+      if (!state.conversations.includes(state.current)) state.conversations.push(state.current);
+      showNotice(`Modo de respuesta: ${RESPONSE_MODES[state.current.responseMode].label}.`);
+      renderConversation();
+      renderHistory();
+      void save();
+    };
     $('#chat-project').addEventListener('change', saveKnowledgePreferences);
     $('#use-knowledge').addEventListener('change', saveKnowledgePreferences);
+    $('#response-mode').addEventListener('change', saveResponseMode);
     setFocusMode(state.focusMode);
     updateControls();
     syncChannel?.addEventListener('message', receiveSync);

@@ -4,6 +4,29 @@ export const SYSTEM_MESSAGE =
 // UTF-8 bytes are a conservative upper bound for this model's byte-level tokens.
 // Leave room for the system prompt, chat template, and up to 512 output tokens.
 export const INPUT_BUDGET = 2800;
+export const RESPONSE_MODES = {
+  balanced: {
+    label: 'Equilibrada',
+    instruction: 'Responde con la extensión necesaria, priorizando claridad y utilidad.',
+  },
+  brief: {
+    label: 'Breve',
+    instruction:
+      'Responde de forma breve: da la respuesta directa en pocas frases y evita repetir la pregunta.',
+  },
+  detailed: {
+    label: 'Detallada',
+    instruction:
+      'Responde con contexto y detalles útiles. Organiza la explicación para que sea fácil de seguir.',
+  },
+  steps: {
+    label: 'Paso a paso',
+    instruction:
+      'Explica el procedimiento paso a paso usando una lista numerada cuando sea apropiado.',
+  },
+};
+export const responseMode = (value) => (Object.hasOwn(RESPONSE_MODES, value) ? value : 'balanced');
+export const responseInstruction = (value) => RESPONSE_MODES[responseMode(value)].instruction;
 const bytes = (text) => new TextEncoder().encode(text).length;
 
 export function newConversation() {
@@ -15,6 +38,7 @@ export function newConversation() {
     createdAt: now,
     updatedAt: now,
     messages: [],
+    responseMode: 'balanced',
   };
 }
 
@@ -79,7 +103,7 @@ export function branchConversation(conversation, messageId, content) {
   return copy;
 }
 
-export function buildContext(messages) {
+export function buildContext(messages, mode = 'balanced') {
   // Keep only complete user/assistant turns. Failed and partial replies remain in
   // the visible history, but must not become factual context for the next turn.
   const latest = messages.findLastIndex((message) => message.role === 'user');
@@ -111,7 +135,10 @@ export function buildContext(messages) {
     i--;
   }
   return {
-    messages: [{ role: 'system', content: SYSTEM_MESSAGE }, ...context],
+    messages: [
+      { role: 'system', content: `${SYSTEM_MESSAGE} ${responseInstruction(mode)}` },
+      ...context,
+    ],
     trimmed: included < latest + 1,
   };
 }
@@ -119,6 +146,7 @@ export function buildContext(messages) {
 export function recoverConversation(conversation) {
   return {
     ...conversation,
+    responseMode: responseMode(conversation.responseMode),
     messages: conversation.messages.map((message) =>
       message.status === 'generating' ? { ...message, status: 'interrupted' } : message,
     ),

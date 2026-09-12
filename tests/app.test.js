@@ -711,6 +711,32 @@ test('loads, streams sanitized output, persists history, renames and searches it
   reopened.close();
 });
 
+test('response mode is persisted per conversation and passed to the model context', async () => {
+  const calls = [];
+  const factory = new IDBFactory();
+  const page = await setup({
+    factory,
+    runtime: {
+      ready: true,
+      async *generate(messages) {
+        calls.push(messages);
+        yield { choices: [{ delta: { content: 'Respuesta breve' } }] };
+      },
+    },
+  });
+  page.$('#response-mode').value = 'brief';
+  page.$('#response-mode').dispatchEvent(new page.window.Event('change'));
+  assert.equal(page.app.state.current.responseMode, 'brief');
+  page.$('#prompt').value = '¿Qué es Semilla Digital?';
+  await page.app.submit();
+  assert.match(calls[0][0].content, /breve/i);
+  page.close();
+  const reopened = await setup({ factory, supported: false });
+  assert.equal(reopened.app.state.current.responseMode, 'brief');
+  assert.equal(reopened.$('#response-mode').value, 'brief');
+  reopened.close();
+});
+
 test('generation failure leaves a retryable answer and retry does not duplicate the user', async () => {
   let fail = true;
   const runtime = {

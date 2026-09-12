@@ -1,4 +1,4 @@
-import { newConversation, newMessage } from './conversations.js';
+import { newConversation, newMessage, responseMode } from './conversations.js';
 import { documentFromPages, splitDocument, MAX_DOCUMENT_BYTES } from './documents.js';
 
 export const MAX_CONVERSATION_BACKUP_BYTES = 16 * 1024 * 1024;
@@ -76,6 +76,12 @@ export function parseConversationBackup(json) {
   }
   copy.useKnowledge = flag(backup.useKnowledge);
   copy.useDocument = flag(backup.useDocument, true);
+  if (
+    backup.responseMode !== undefined &&
+    !['balanced', 'brief', 'detailed', 'steps'].includes(backup.responseMode)
+  )
+    invalid();
+  copy.responseMode = responseMode(backup.responseMode);
   const ids = new Map();
   const remap = (id) => {
     text(id, 256);

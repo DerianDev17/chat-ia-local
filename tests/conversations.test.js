@@ -10,7 +10,17 @@ import {
   recoverConversation,
   validatePrompt,
   INPUT_BUDGET,
+  responseInstruction,
+  responseMode,
 } from '../src/conversations.js';
+
+test('response modes normalize safely and add an explicit instruction to general context', () => {
+  assert.equal(responseMode('brief'), 'brief');
+  assert.equal(responseMode('unknown'), 'balanced');
+  assert.match(responseInstruction('steps'), /paso a paso/i);
+  const context = buildContext([newMessage('user', 'Explica esto')], 'brief');
+  assert.match(context.messages[0].content, /breve/i);
+});
 
 test('editing a question branches only preceding turns with independent documents and references', () => {
   const original = newConversation();
